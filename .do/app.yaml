@@ -17,10 +17,12 @@ services:
     instance_size_slug: basic-xxs
     http_port: 8080
 
-    github:
-      repo: DO-Solutions/mars-ticket-to-pr-console
+    # A public clone URL needs no GitHub app installation on the org, which
+    # DO-Solutions restricts to owners. Trade-off: no deploy-on-push — use
+    # `doctl apps create-deployment <app-id>` after pushing, or scripts/deploy.sh.
+    git:
+      repo_clone_url: https://github.com/DO-Solutions/mars-ticket-to-pr-console.git
       branch: main
-      deploy_on_push: true
 
     build_command: npm run build
     run_command: npm start

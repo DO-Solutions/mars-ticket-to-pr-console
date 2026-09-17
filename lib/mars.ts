@@ -32,6 +32,9 @@ export async function fireTrigger(
       'X-DigitalOcean-Signature': `t=${ts},v1=${sig}`,
     },
     body,
+    // Fail fast: a dispatch that cannot reach the trigger should report that,
+    // not sit until the platform's gateway times the request out.
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!res.ok) {

@@ -1,7 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // Deliberately not 'standalone': App Platform's buildpack runs `next start`,
+  // and Next warns that standalone output is incompatible with it.
   eslint: { ignoreDuringBuilds: true },
 };
 

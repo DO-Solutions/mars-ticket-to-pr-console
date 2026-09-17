@@ -11,12 +11,23 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
   const ticket = getTicket(key);
   if (!ticket) return NextResponse.json({ error: 'unknown ticket' }, { status: 404 });
 
-  const triggerId = process.env.MARS_FIXER_TRIGGER_ID;
-  const secret = process.env.MARS_FIXER_TRIGGER_SECRET;
-  const sessionId = process.env.MARS_FIXER_SESSION_ID;
+  // An unset variable and a leftover REPLACE_ME placeholder are the same
+  // problem, and both should say so rather than failing somewhere downstream.
+  const conf = (name: string): string | undefined => {
+    const v = process.env[name];
+    return !v || v === 'REPLACE_ME' ? undefined : v;
+  };
+  const triggerId = conf('MARS_FIXER_TRIGGER_ID');
+  const secret = conf('MARS_FIXER_TRIGGER_SECRET');
+  const sessionId = conf('MARS_FIXER_SESSION_ID');
   if (!triggerId || !secret || !sessionId) {
     return NextResponse.json(
-      { error: 'MARS_FIXER_TRIGGER_ID, MARS_FIXER_TRIGGER_SECRET and MARS_FIXER_SESSION_ID must be set' },
+      {
+        error:
+          'MARS is not configured on this app. Set MARS_FIXER_TRIGGER_ID, ' +
+          'MARS_FIXER_TRIGGER_SECRET and MARS_FIXER_SESSION_ID from the output of ' +
+          'scripts/setup-mars.sh.',
+      },
       { status: 500 },
     );
   }

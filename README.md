@@ -1,0 +1,160 @@
+# MARS demo — ticket → reviewed pull request
+
+A working demo of **DigitalOcean Managed Agents (MARS)** doing a real unit of
+engineering work, unattended, with guardrails.
+
+A ticket on a Jira-style board is dispatched to an agent. The agent clones a
+real repository, reproduces the bug, fixes the root cause, proves it with the
+test suite, pushes a branch and opens a pull request. A **second, independent
+agent** is then woken by GitHub's `pull_request` webhook, reviews the diff
+against the repo's written conventions, and posts an approve / request-changes
+verdict. Both agents comment back on the ticket.
+
+Throughout, the console streams each session's **real** telemetry — the agent's
+reasoning, every tool call with its arguments and duration, token counts and
+cost — straight from the MARS session event API.
+
+> The board is the only simulated part, standing in for a Jira connector that
+> already exists in Action Gateway's catalogue. The sessions, tool calls, token
+> accounting, branches, pull requests and reviews are all real.
+
+## The two repos
+
+| Repo | What it is |
+|---|---|
+| `mars-ticket-to-pr-console` (this one) | the console app, the agent manifests, and the setup/reset scripts |
+| `mars-ticket-to-pr-taskflow` | the target repo the agent actually modifies, carrying four seeded work items |
+
+## How it fits together
+
+```
+Console (App Platform)
+  │  "Dispatch AI agent" on TF-101
+  │  POST <trigger webhook>, HMAC-signed per the provider's scheme
+  ▼
+MARS fixer trigger  (webhook · session-mode reuse · custom signature)
+  ▼
+Warm MARS session   (OpenCode · deepseek-v4-pro via DO Gradient inference)
+  ├─ reset workspace, reproduce the failing test
+  ├─ fix src/, run npm test until green
+  ├─ push agent/TF-101-… and `gh pr create`
+  └─ POST the outcome to /api/agent/callback
+  ▼
+GitHub webhook: pull_request.opened
+  ▼
+MARS reviewer trigger (webhook · session-mode fresh · github signature)
+  ├─ clone, `gh pr checkout`, run the tests itself
+  ├─ judge the diff against AGENTS.md
+  ├─ `gh pr review --approve` / `--request-changes`
+  └─ POST the verdict to /api/agent/callback
+
+Console reads back:  GET /v2/agents/sessions/{id}/events   (SSE, live)
+                     GET /v2/agents/triggers/{id}/executions
+```
+
+### Why the fixer reuses a session and the reviewer does not
+
+The fixer trigger runs in **reuse** mode, bound to a long-lived paused session.
+Its session ID is therefore known before the webhook fires, so the console can
+attach to the event stream first and cannot miss the start of a run — and the
+warm workspace keeps the repo cloned and `node_modules` installed, which makes
+runs noticeably faster on camera.
+
+The reviewer stays **fresh** on purpose: an independent reviewer should start
+from a clean checkout with no memory of how the fix was written. The console
+folds its events into its own store as they stream, so the run is still fully
+visible after the session is gone.
+
+## Setup
+
+### 1. Prerequisites
+
+- `doctl` **beta** build with `harness-runtime` (≥ 1.168.0-beta.6) — the agent
+  commands are not in the standard release
+- the right team: `doctl auth switch --context "solutions demos"`
+- `gh` authenticated, and SSO-authorised for the `DO-Solutions` org
+- Managed Agents enabled on the team
+
+### 2. Credentials
+
+Three secret files, none of which is ever committed:
+
+```bash
+mkdir -p ~/.secrets
+# A Gradient model access key. Note these can no longer be created over the
+# API — use the control panel's model access key page.
+printf '%s' '<doo_v1_...>'  > ~/.secrets/do-inference.key
+# A fine-grained GitHub PAT, scoped to ONLY the two demo repos, with
+# contents:write + pull-requests:write.
+printf '%s' '<github_pat_...>' > ~/.secrets/taskflow-pat
+# Any random string; the agents present it when posting back to the console.
+openssl rand -hex 24 > ~/.secrets/console-callback
+```
+
+The manifests declare these as `secrets:` *slots* and the scripts inject them
+with `--secret NAME=@path`, so values go to DigitalOcean Secrets Manager at
+create time and are never written into the repo or returned by the API.
+
+### 3. Deploy the console
+
+```bash
+doctl apps create --spec .do/app.yaml
+```
+
+### 4. Wire up MARS
+
+```bash
+CONSOLE_URL=https://<your-app>.ondigitalocean.app ./scripts/setup-mars.sh
+```
+
+This creates the warm fixer session, warms its workspace, pauses it, creates
+both triggers, and prints the environment variables to set on the app plus the
+GitHub webhook to add to the taskflow repo. **Webhook secrets are shown once.**
+
+### 5. Check it
+
+```bash
+./scripts/reset-demo.sh     # expect: 5 tickets in Backlog, 4 skipped tests on main
+```
+
+Then dispatch TF-101 in the UI.
+
+## Running the console locally
+
+```bash
+npm install
+npm run dev
+```
+
+With no MARS environment variables set, the board and panes work and dispatch
+returns a clear error naming what is missing. To drive a real run locally, the
+agents need to reach your machine — expose it with a tunnel and set
+`CONSOLE_URL` to the public URL before running `setup-mars.sh`, since the
+egress allowlist in the manifests is built from that host.
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `DO_API_TOKEN` | reads sessions, events and trigger executions |
+| `GITHUB_TOKEN` | read-only, renders PR and review state |
+| `AGENT_CALLBACK_TOKEN` | shared secret for `/api/agent/callback` |
+| `MARS_FIXER_SESSION_ID` | the warm session the console streams |
+| `MARS_FIXER_TRIGGER_ID` / `_SECRET` | dispatch target and its signing secret |
+| `MARS_REVIEWER_TRIGGER_ID` | polled to discover review runs |
+| `TARGET_REPO` | defaults to `DO-Solutions/mars-ticket-to-pr-taskflow` |
+
+## Notes
+
+A few practical things worth knowing if you are running or extending this demo:
+
+- The sandbox image has `gh`, git, node 20, npm, python3 and make preinstalled.
+  It does **not** have `jq`, so the agent skills use `python3` for JSON.
+- Prompts must be imperative. Ask the agent to "run X with your bash tool and
+  paste the real output" — a conversational prompt gets a conversational answer.
+- Name the skill file explicitly in the prompt rather than relying on the agent
+  to pick a skill up from its description.
+- Guardrails are `deny` rules, not `ask`. On an unattended run there is nobody to
+  answer a prompt, so anything the agent must never do needs denying outright.
+- `doctl harness-runtime validate` checks a manifest's syntax locally. Confirm
+  actual behaviour by running a session.

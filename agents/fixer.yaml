@@ -1,0 +1,157 @@
+# Fixer agent — takes a TaskFlow ticket and opens a pull request that resolves it.
+#
+# This manifest creates the WARM session that the fixer trigger binds to in
+# reuse mode. Reuse is deliberate: a bound session's ID is known before the
+# webhook fires, so the console attaches to the event stream first and cannot
+# miss the start of a run, and the warm workspace keeps the repo cloned and
+# node_modules installed between runs.
+#
+# Create with:
+#   doctl harness-runtime create agents/fixer.yaml \
+#     --secret HARNESS_INFERENCE_API_KEY=@~/.secrets/do-inference.key \
+#     --secret GITHUB_TOKEN=@~/.secrets/taskflow-pat \
+#     --secret CONSOLE_TOKEN=@~/.secrets/console-callback
+name: taskflow-fixer
+agent: opencode
+size: mv-2vcpu-4gb
+persistent_workspace: true
+
+env:
+  HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
+  HARNESS_INFERENCE_MODEL: deepseek-v4-pro
+  TARGET_REPO: DO-Solutions/mars-ticket-to-pr-taskflow
+  CONSOLE_URL: "${CONSOLE_URL}"
+
+secrets:
+  HARNESS_INFERENCE_API_KEY: "placeholder-injected-at-create-time"
+  GITHUB_TOKEN: "placeholder-injected-at-create-time"
+  CONSOLE_TOKEN: "placeholder-injected-at-create-time"
+
+# Guardrails. On an unattended run there is nobody to answer an approval
+# prompt, so `ask` is not a control here — anything the agent must never do
+# needs an explicit `deny`.
+permissions:
+  default: allow
+  rules:
+    - { tool: bash, match: { command: "rm -rf *" },            action: deny }
+    - { tool: bash, match: { command: "git push --force*" },   action: deny }
+    - { tool: bash, match: { command: "git push -f*" },        action: deny }
+    - { tool: bash, match: { command: "git push origin main*" }, action: deny }
+    - { tool: bash, match: { command: "gh pr merge*" },        action: deny }
+    - { tool: bash, match: { command: "curl * | sh" },         action: deny }
+
+egress:
+  allow_hosts:
+    - api.github.com
+    - github.com
+    - codeload.github.com
+    - inference.do-ai.run
+    - registry.npmjs.org
+    - "${CONSOLE_HOST}"
+
+skills:
+  - name: fix-a-taskflow-ticket
+    description: Use when handling a TaskFlow ticket that asks for a bug fix, a feature, or a chore in the taskflow API repo.
+    license: Apache-2.0
+    metadata: { author: DO-Solutions }
+    allowed_tools: [bash, file.read, file.write]
+    instructions: |
+      # Fixing a TaskFlow ticket
+
+      Work through these steps in order. Do not skip the reproduce step.
+
+      ## 1. Get a clean workspace
+      The workspace persists between runs, so always reset it first:
+
+          cd /workspace
+          if [ -d taskflow/.git ]; then
+            cd taskflow && git fetch origin main && git checkout main \
+              && git reset --hard origin/main && git clean -fd
+          else
+            gh repo clone "$TARGET_REPO" taskflow && cd taskflow
+          fi
+          [ -d node_modules ] || npm ci
+
+      `gh` is already authenticated from $GITHUB_TOKEN. Note `jq` is NOT
+      installed — use `python3 -m json.tool` or `python3 -c` for JSON.
+
+      ## 2. Read the rules
+      Read `AGENTS.md` in the repo root. It is binding, and a second agent will
+      review your pull request against it.
+
+      ## 3. Reproduce before fixing
+      Most tickets already have a regression test written and marked
+      `it.skip(...)` with the ticket key in a comment above it. Find it:
+
+          grep -rn "TF-" tests/
+
+      Un-skip that test (`it.skip(` -> `it(`) and run `npm test`. Confirm it
+      fails, and read the failure message — it tells you what the correct
+      behaviour is. If the ticket has no test yet, write one first, and confirm
+      it fails for the right reason.
+
+      ## 4. Fix the root cause
+      Change the source in `src/`, not the test. Fix the underlying expression,
+      not the symptom. Keep the change as small as the ticket allows, and do not
+      touch files the ticket does not concern.
+
+      ## 5. Prove it
+      Run `npm test`. Every test must pass — the baseline is 6 passing, plus
+      whichever tests you un-skipped. If you broke an unrelated test, fix your
+      change rather than the test.
+
+      ## 6. Commit and push
+      Branch and commit per AGENTS.md:
+
+          git switch -c "agent/TF-<number>-<short-slug>"
+          git add -A
+          git commit -m "fix(tasks): <imperative summary>"
+          git push -u origin "agent/TF-<number>-<short-slug>"
+
+      Never force-push, never push to main, never merge the PR yourself.
+
+      ## 7. Open the pull request
+      Title must start with the ticket key. The body must have **Root cause**,
+      **Fix**, and **Verification** sections, per AGENTS.md:
+
+          gh pr create --title "TF-<number>: <summary>" --body "$(cat <<'EOF'
+          ## Root cause
+          <the specific line or expression at fault, and why it misbehaves>
+
+          ## Fix
+          <what you changed>
+
+          ## Verification
+          <the npm test summary line>
+          EOF
+          )"
+
+      ## 8. Report back to the board
+      Write your summary to a file first, so no shell quoting or JSON escaping
+      can go wrong, then let python build the request body:
+
+          cat > /tmp/summary.txt <<'TXT'
+          <two or three sentences: the root cause and what you changed>
+          TXT
+
+          python3 -c "
+          import json,sys
+          print(json.dumps({
+            'ticket':  sys.argv[1],
+            'author':  'fixer',
+            'status':  'pr_opened',
+            'pr_url':  sys.argv[2],
+            'body':    open('/tmp/summary.txt').read().strip(),
+          }))" "<TICKET KEY>" "<PR URL from gh>" > /tmp/callback.json
+
+          curl -sS -X POST "$CONSOLE_URL/api/agent/callback" \
+            -H "Authorization: Bearer $CONSOLE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/callback.json
+
+      Substitute the ticket key given in your prompt and the PR URL exactly as
+      `gh pr create` printed it. Expect `{"ok":true}` back.
+
+      If a guardrail blocks something you were asked to do, do not try to work
+      around it. Finish the rest of the ticket and say plainly in both the PR
+      body and the callback which action was blocked and why.

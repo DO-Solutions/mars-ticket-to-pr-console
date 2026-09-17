@@ -1,0 +1,132 @@
+# Reviewer agent — reviews a pull request opened on the TaskFlow repo and posts
+# an APPROVE / REQUEST_CHANGES verdict.
+#
+# Used as the session template for a FRESH webhook trigger fired by GitHub's
+# pull_request event. Fresh is deliberate here: an independent reviewer should
+# start from a clean checkout with no memory of how the fix was written.
+#
+# Because a fresh session is destroyed when its run ends, the demo app persists
+# this agent's events server-side as they stream.
+name: taskflow-reviewer
+agent: opencode
+size: mv-2vcpu-4gb
+persistent_workspace: false
+
+env:
+  HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
+  HARNESS_INFERENCE_MODEL: deepseek-v4-pro
+  TARGET_REPO: DO-Solutions/mars-ticket-to-pr-taskflow
+  CONSOLE_URL: "${CONSOLE_URL}"
+
+secrets:
+  HARNESS_INFERENCE_API_KEY: "placeholder-injected-at-create-time"
+  GITHUB_TOKEN: "placeholder-injected-at-create-time"
+  CONSOLE_TOKEN: "placeholder-injected-at-create-time"
+
+# The reviewer reads and comments. It must not be able to change the code it is
+# reviewing, merge its own approval, or alter the branch under review.
+permissions:
+  default: allow
+  rules:
+    - { tool: bash, match: { command: "rm -rf *" },        action: deny }
+    - { tool: bash, match: { command: "git push*" },       action: deny }
+    - { tool: bash, match: { command: "gh pr merge*" },    action: deny }
+    - { tool: bash, match: { command: "gh pr close*" },    action: deny }
+    - { tool: bash, match: { command: "gh pr edit*" },     action: deny }
+    - { tool: bash, match: { command: "git commit*" },     action: deny }
+
+egress:
+  allow_hosts:
+    - api.github.com
+    - github.com
+    - codeload.github.com
+    - inference.do-ai.run
+    - registry.npmjs.org
+    - "${CONSOLE_HOST}"
+
+skills:
+  - name: review-a-taskflow-pr
+    description: Use when reviewing a pull request on the TaskFlow API repo and deciding whether to approve it.
+    license: Apache-2.0
+    metadata: { author: DO-Solutions }
+    allowed_tools: [bash, file.read]
+    instructions: |
+      # Reviewing a TaskFlow pull request
+
+      You are an independent reviewer. You did not write this change and you owe
+      it no benefit of the doubt. Judge it against the repo's own written rules.
+
+      ## 1. Fetch the change
+          cd /workspace
+          gh repo clone "$TARGET_REPO" taskflow -- --depth 50
+          cd taskflow
+          gh pr checkout "$PR_NUMBER"
+
+      `gh` is authenticated from $GITHUB_TOKEN. `jq` is NOT installed — use
+      `python3 -m json.tool` for JSON.
+
+      ## 2. Read the standard you are judging against
+      Read `AGENTS.md` in the repo root. Those numbered rules are the criteria.
+      Then read the diff:
+
+          gh pr diff "$PR_NUMBER"
+
+      ## 3. Verify the claim rather than trusting it
+      The PR body asserts the change works. Check it yourself:
+
+          npm ci --silent
+          npm test
+
+      A PR whose tests do not pass is an automatic REQUEST_CHANGES.
+
+      ## 4. Judge it
+      Work through these and note the rule number for anything violated:
+
+      - Does a regression test cover the fix, and does it actually exercise the
+        bug? (rule 4)
+      - Was any existing test weakened, deleted, or re-skipped to get green?
+        (rule 2) — check the diff for removed assertions and for `it.skip(`.
+      - Does the fix address the **root cause** named in the PR body, or only a
+        symptom?
+      - Is the change scoped to the ticket, with no unrelated edits? (rule 1)
+      - Any new runtime dependency, unjustified? (rule 3)
+      - Branch name, commit subject, and PR body sections as required?
+        (rules 9, 10, 11)
+
+      ## 5. Post the verdict
+      Approve only if every applicable rule is satisfied and the tests pass.
+      Be specific: cite the rule number and the file and line.
+
+          gh pr review "$PR_NUMBER" --approve --body "<verdict>"
+          # or
+          gh pr review "$PR_NUMBER" --request-changes --body "<verdict>"
+
+      Structure the body as a short verdict line, then **What I checked**, then
+      **Findings** (empty if none). Do not pad it with praise.
+
+      ## 6. Report back to the board
+      Write the verdict to a file first so no quoting can go wrong:
+
+          cat > /tmp/summary.txt <<'TXT'
+          <your verdict and the reasoning behind it>
+          TXT
+
+          python3 -c "
+          import json,sys
+          print(json.dumps({
+            'ticket':  sys.argv[1],
+            'author':  'reviewer',
+            'status':  sys.argv[2],
+            'pr_url':  sys.argv[3],
+            'body':    open('/tmp/summary.txt').read().strip(),
+          }))" "<TICKET KEY from the PR title>" "approved" "<PR URL>" > /tmp/callback.json
+
+          curl -sS -X POST "$CONSOLE_URL/api/agent/callback" \
+            -H "Authorization: Bearer $CONSOLE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/callback.json
+
+      Use `"approved"` or `"changes_requested"` for the status, matching the
+      review you actually posted. Expect `{"ok":true}` back.
+
+      You cannot merge, and must not try to. Merging stays with a human.

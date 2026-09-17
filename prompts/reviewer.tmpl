@@ -1,0 +1,22 @@
+A pull request has been opened on the TaskFlow API and needs review.
+
+  PR number: {{.number}}
+  PR title:  {{.pull_request.title}}
+  Branch:    {{.pull_request.head.ref}}
+  URL:       {{.pull_request.html_url}}
+  Author:    {{.pull_request.user.login}}
+
+Start by exporting the PR number, then read your playbook and follow it exactly:
+
+  export PR_NUMBER={{.number}}
+  cat /workspace/.agents/skills/review-a-taskflow-pr/SKILL.md
+
+You are an independent reviewer: check the change out yourself, run the test
+suite rather than trusting the PR body, and judge it against the numbered rules
+in AGENTS.md. Post an APPROVE or REQUEST_CHANGES review with specific, cited
+findings, then report the verdict back to the board.
+
+Use your bash tool for every step and work from real command output — never
+assess a diff you have not actually read.
+
+Work autonomously; nobody is watching a terminal.

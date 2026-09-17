@@ -1,0 +1,22 @@
+A ticket has been assigned to you on the TaskFlow board.
+
+  Ticket:   {{.ticket.key}}
+  Type:     {{.ticket.type}}
+  Summary:  {{.ticket.summary}}
+
+{{.ticket.description}}
+
+Before you do anything else, read your playbook and follow it exactly:
+
+  cat /workspace/.agents/skills/fix-a-taskflow-ticket/SKILL.md
+
+Then handle the ticket end to end: reset the workspace, reproduce the problem,
+fix the root cause, prove it with the test suite, push a branch, open a pull
+request, and post the outcome back to the board for ticket {{.ticket.key}}.
+
+Use your bash tool for every step and work from real command output — do not
+describe what you would do, and do not answer from memory.
+
+Work autonomously; nobody is watching a terminal. Do not ask questions. If
+something is ambiguous, choose the reading most consistent with AGENTS.md and
+say which reading you chose in the pull request body.

@@ -26,8 +26,8 @@ export async function POST(req: Request) {
     /* defaults below */
   }
 
-  const fixture = body.fixture ?? 'fixer-TF-101.sse';
-  const ticket = body.ticket ?? 'TF-101';
+  const fixture = body.fixture ?? 'fixer-TF-104.sse';
+  const ticket = body.ticket ?? 'TF-104';
   if (!getTicket(ticket)) return NextResponse.json({ error: `unknown ticket ${ticket}` }, { status: 404 });
 
   // Keep the path inside fixtures/ regardless of what was asked for.

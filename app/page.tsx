@@ -70,7 +70,7 @@ export default function Page() {
     await fetch('/api/demo/replay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fixture: 'sample-with-tools.sse', ticket: ticket.key, speed: 3 }),
+      body: JSON.stringify({ fixture: 'fixer-TF-104.sse', ticket: ticket.key, speed: 2 }),
     });
     void refresh();
   };

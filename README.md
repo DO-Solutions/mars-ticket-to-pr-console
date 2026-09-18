@@ -181,6 +181,15 @@ whose event stream replays from the beginning on every connect. The console
 records the session's latest `seq` before firing and ignores anything at or
 below it. If you drive a reused session by hand, apply the same watermark.
 
+**The review shows as a comment, not a formal approval.** GitHub refuses
+`APPROVED` and `CHANGES_REQUESTED` when the reviewer is the pull request's own
+author, and by default both agents authenticate with the same token. The
+reviewer states its verdict on the first line of the review and the console
+renders that, so the demo still shows an approve / request-changes outcome — but
+GitHub's own badge will not appear. Give the reviewer its own GitHub account and
+PAT to restore genuine review states; the partner guide recommends a dedicated
+account for exactly this kind of reason.
+
 **A reviewer session appears during a reset.** Closing a pull request is also a
 `pull_request` event, and GitHub's UI cannot filter by action. The reviewer
 prompt exits early unless the action is `opened`, `reopened` or `synchronize`.

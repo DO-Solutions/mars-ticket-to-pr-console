@@ -9,12 +9,9 @@ recording or a client call never depends on a live sandbox being healthy.
 
 | Fixture | What it is |
 |---|---|
-| `sample-session.sse` | a short real run — enough to prove the plumbing |
-| `sample-with-tools.sse` | a longer real run with tool calls, durations and token accounting |
+| `fixer-TF-104.sse` | a real fixer run on TF-104: reproduce, fix, test, push, open the PR, report back (156 events, 11 tool calls) |
 
-Both shipped fixtures are **placeholders** captured from unrelated sessions
-while the demo was being built. Replace them with a real fixer run as soon as
-one succeeds:
+Refresh it after any run you would rather show:
 
 ```bash
 export DIGITALOCEAN_ACCESS_TOKEN=<a DO PAT>

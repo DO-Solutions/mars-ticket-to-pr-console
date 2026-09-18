@@ -75,7 +75,16 @@ Back to TF-101. The PR is open; the second feed is now live.
 > checks the branch out and runs the tests itself rather than trusting the PR
 > body."
 
-Show the verdict, then the real review on GitHub next to the green CI check.
+Show the verdict in the console, then the real review on GitHub next to the
+green CI check.
+
+Note for the presenter: drive this beat **from the console**. The review lands on
+GitHub as a comment rather than a formal approval, because both agents share one
+GitHub identity and GitHub will not let an author review their own pull request.
+The verdict is the first line of the review body and the console renders it as
+APPROVED or CHANGES REQUESTED. If a client asks, the answer is short and good:
+in production the reviewer gets its own account, which is what you would do
+anyway so that a review carries an identity distinct from the author.
 
 > "It's judging against AGENTS.md in the repo — the same conventions a human
 > reviewer would use. It cites the rule it's applying."

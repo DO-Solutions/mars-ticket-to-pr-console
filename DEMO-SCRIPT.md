@@ -47,9 +47,17 @@ Dispatch it.
 
 When the blocked card appears in the feed:
 
-> "It's blocked at the platform, not by the model's good judgement. And note
-> what the agent does: finishes the part it's allowed to do, then tells us what
-> it refused and why. It doesn't route around it."
+> "That's blocked at the platform, not by the model's good judgement — the
+> refusal comes back as a failed tool call with the matching rule attached."
+
+Then be honest about what it does next, because it is the more interesting
+point and an observant client will spot it anyway:
+
+> "Watch what it tries next. A deny rule stops that specific command, not the
+> intent behind it — here it reaches for another way to get the same result.
+> That's exactly what the docs warn about: to constrain a capability you have to
+> cover the routes to it, and verify on a live session. What you get from the
+> platform is a hard stop on the thing you named, and a record of the attempt."
 
 Open **Guardrails** and show the deny rules and the egress allowlist.
 

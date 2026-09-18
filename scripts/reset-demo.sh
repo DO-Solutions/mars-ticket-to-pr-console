@@ -87,10 +87,14 @@ fi
 
 echo "==> resetting the warm fixer workspace"
 if doctl harness-runtime show taskflow-fixer >/dev/null 2>&1; then
+  # exec runs as root; the workspace belongs to the agent (uid 10001), so git
+  # needs the directory marked safe before it will touch it.
   doctl harness-runtime exec taskflow-fixer -- sh -c '
     cd /workspace/taskflow 2>/dev/null || exit 0
+    git config --global --add safe.directory /workspace/taskflow
     git checkout main -q && git fetch origin main -q && git reset --hard origin/main -q && git clean -fd -q
     git branch --list "agent/*" | tr -d " " | xargs -r -n1 git branch -D -q 2>/dev/null || true
+    chown -R 10001:10001 /workspace/taskflow
     echo "workspace clean at $(git rev-parse --short HEAD)"
   ' || echo "    (session unreachable — it may be paused; this is fine)"
   doctl harness-runtime pause taskflow-fixer >/dev/null 2>&1 || true

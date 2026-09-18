@@ -130,8 +130,9 @@ export function applyEvent(runId: string, ev: MarsEvent): boolean {
 export async function consumeSession(
   runId: string,
   sessionId: string,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; afterSeq?: number } = {},
 ): Promise<void> {
+  const afterSeq = opts.afterSeq ?? 0;
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), opts.timeoutMs ?? 15 * 60 * 1000);
 
@@ -142,6 +143,9 @@ export async function consumeSession(
       return;
     }
     for await (const ev of parseEventStream(res)) {
+      // A reused session replays its whole history on connect; anything at or
+      // below the watermark belongs to an earlier run.
+      if (typeof ev.seq === 'number' && ev.seq <= afterSeq) continue;
       const finished = applyEvent(runId, ev);
       if (finished) break;
     }

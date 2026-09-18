@@ -1,12 +1,24 @@
-A pull request has been opened on the TaskFlow API and needs review.
+A pull request event has arrived from the TaskFlow API repository.
 
+  Action:    {{.action}}
   PR number: {{.number}}
   PR title:  {{.pull_request.title}}
   Branch:    {{.pull_request.head.ref}}
   URL:       {{.pull_request.html_url}}
   Author:    {{.pull_request.user.login}}
 
-Start by exporting the PR number, then read your playbook and follow it exactly:
+**If the fields above are blank**, this is a configuration fault, not an empty
+event: the GitHub webhook is sending `application/x-www-form-urlencoded`, so the
+payload arrives as a single urlencoded `payload=` string and no field can be
+read from it. Do not clone or search for something to review. Reply exactly:
+`CONFIG ERROR: webhook content type must be application/json` and stop.
+
+**Otherwise check the action.** If it is anything other than `opened`,
+`reopened` or `synchronize`, this event does not need a review: reply exactly
+`SKIPPED: <action>` and stop. Do not clone anything, do not review, do not post.
+A closed or merged pull request in particular must never be reviewed.
+
+Otherwise, export the PR number, then read your playbook and follow it exactly:
 
   export PR_NUMBER={{.number}}
   cat /workspace/.agents/skills/review-a-taskflow-pr/SKILL.md

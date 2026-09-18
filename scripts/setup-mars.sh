@@ -69,12 +69,20 @@ echo "    session: $FIXER_SESSION_ID"
 # Warm the workspace so the first demo run is not the one that pays for the
 # clone and npm install.
 echo "==> warming the workspace (clone + npm ci)"
-doctl harness-runtime exec taskflow-fixer -- sh -c '
+# `exec` runs as root but the agent runs as uid 10001 (`agent`), so anything
+# created here must be handed over or the agent hits git's "dubious ownership"
+# check and wastes the first run re-cloning.
+doctl harness-runtime exec taskflow-fixer -- sh -c "
+  set -e
   cd /workspace
-  if [ ! -d taskflow/.git ]; then gh repo clone "$TARGET_REPO" taskflow; fi
-  cd taskflow && git fetch origin main -q && [ -d node_modules ] || npm ci --silent
-  echo "workspace ready: $(git rev-parse --short HEAD)"
-' || echo "    (warm-up failed — check the GITHUB_TOKEN secret and TARGET_REPO)"
+  if [ ! -d taskflow/.git ]; then gh repo clone '$TARGET_REPO' taskflow; fi
+  cd taskflow
+  git config --global --add safe.directory /workspace/taskflow
+  git fetch origin main -q
+  [ -d node_modules ] || npm ci --silent
+  chown -R 10001:10001 /workspace/taskflow
+  echo \"workspace ready: \$(git rev-parse --short HEAD), owned by \$(stat -c %U /workspace/taskflow)\"
+" || echo "    (warm-up failed — check the GITHUB_TOKEN secret and TARGET_REPO)"
 
 echo "==> pausing it so a reuse trigger can bind"
 doctl harness-runtime pause taskflow-fixer >/dev/null
@@ -118,16 +126,16 @@ cat <<OUT
 ============================================================
 Set these on the console app (App Platform > Settings > env):
 
-  DO_API_TOKEN=<a DO PAT with full access>
+  DO_API_TOKEN=<a DO token scoped to agent_harness_session>
   TARGET_REPO=$TARGET_REPO
-  GITHUB_TOKEN=<read-only fine-grained PAT for the taskflow repo>
+  GITHUB_TOKEN=<PAT for the taskflow repo; read is enough for the console>
   AGENT_CALLBACK_TOKEN=$(cat "$CALLBACK_TOKEN")
   MARS_FIXER_SESSION_ID=$FIXER_SESSION_ID
   MARS_FIXER_TRIGGER_ID=$FIXER_TRIGGER_ID
   MARS_FIXER_TRIGGER_SECRET=$FIXER_SECRET
   MARS_REVIEWER_TRIGGER_ID=$REVIEWER_TRIGGER_ID
 
-Add this webhook to DO-Solutions/mars-ticket-to-pr-taskflow
+Add this webhook to $TARGET_REPO
 (Settings > Webhooks > Add webhook):
 
   Payload URL:  $REVIEWER_URL

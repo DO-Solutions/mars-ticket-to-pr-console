@@ -167,6 +167,24 @@ administrator approval, which can take days. Pointing `TARGET_REPO` at a mirror
 you own (`TARGET_REPO=<you>/mars-ticket-to-pr-taskflow`) lets the demo run
 end to end in the meantime, and flipping it back later is one variable.
 
+## Troubleshooting
+
+**The reviewer runs but posts nothing, and its prompt shows blank fields.**
+The GitHub webhook is using GitHub's default content type. Set it to
+`application/json` — with form encoding the whole body arrives as one
+urlencoded `payload=` string and no `{{.field}}` placeholder can resolve. The
+run still succeeds and bills tokens, so this fails quietly; the reviewer prompt
+is written to detect and name it.
+
+**The fixer feed shows the previous run.** The fixer reuses a warm session,
+whose event stream replays from the beginning on every connect. The console
+records the session's latest `seq` before firing and ignores anything at or
+below it. If you drive a reused session by hand, apply the same watermark.
+
+**A reviewer session appears during a reset.** Closing a pull request is also a
+`pull_request` event, and GitHub's UI cannot filter by action. The reviewer
+prompt exits early unless the action is `opened`, `reopened` or `synchronize`.
+
 ## Notes
 
 A few practical things worth knowing if you are running or extending this demo:

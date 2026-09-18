@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fireTrigger } from '@/lib/mars';
+import { fireTrigger, latestSeq } from '@/lib/mars';
 import { consumeSession } from '@/lib/consume';
 import { watchReviewer } from '@/lib/watch-reviewer';
 import { createRun, getTicket, moveTicket, addComment } from '@/lib/store';
@@ -44,6 +44,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     },
   };
 
+  // Read the session's position first: the fixer reuses a warm session, so
+  // everything already in its transcript belongs to previous runs.
+  const watermark = await latestSeq(sessionId);
+
   let executionId: string;
   try {
     ({ executionId } = await fireTrigger(triggerId, secret, payload));
@@ -67,7 +71,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     costMicros: 0,
   });
 
-  void consumeSession(executionId, sessionId);
+  void consumeSession(executionId, sessionId, { afterSeq: watermark });
   watchReviewer(ticket.key);
 
   moveTicket(ticket.key, 'in_progress');

@@ -24,8 +24,16 @@ export type PrState = {
   deletions: number;
   changedFiles: number;
   checks: { status: string; conclusion: string | null };
-  reviews: { author: string; state: string; body: string; at: string }[];
+  reviews: { author: string; state: string; declaredState?: string; body: string; at: string }[];
 };
+
+/** Read the verdict the agent declared in its review body. */
+function verdictFromBody(body: string): string {
+  const head = body.slice(0, 120).toUpperCase();
+  if (/REQUEST[_ ]?CHANGES|CHANGES[_ ]REQUESTED/.test(head)) return 'CHANGES_REQUESTED';
+  if (/\bAPPROVE(D)?\b/.test(head)) return 'APPROVED';
+  return 'COMMENTED';
+}
 
 export async function getPr(number: number): Promise<PrState | null> {
   const r = await fetch(`${GH}/repos/${repo()}/pulls/${number}`, { headers: headers(), cache: 'no-store' });
@@ -40,7 +48,12 @@ export async function getPr(number: number): Promise<PrState | null> {
   const reviews = reviewsRes.ok
     ? ((await reviewsRes.json()) as any[]).map((v) => ({
         author: v.user?.login ?? 'unknown',
-        state: v.state,
+        // GitHub refuses APPROVED / CHANGES_REQUESTED when the reviewer is the
+        // pull request's own author, so a single-identity setup can only ever
+        // produce COMMENTED. The agent states its verdict on the first line, so
+        // fall back to that rather than showing no verdict at all.
+        state: v.state === 'COMMENTED' ? verdictFromBody(v.body ?? '') : v.state,
+        declaredState: v.state,
         body: v.body ?? '',
         at: v.submitted_at,
       }))

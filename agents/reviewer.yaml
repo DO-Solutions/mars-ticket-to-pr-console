@@ -57,12 +57,19 @@ skills:
       it no benefit of the doubt. Judge it against the repo's own written rules.
 
       ## 1. Fetch the change
+
+      Substitute the pull request number from your prompt everywhere `<PR
+      number>` appears below. **Every bash command runs in a fresh shell**, so
+      an `export` in one command is gone by the next — type the number in
+      literally each time. If a command reports "no pull requests found for
+      branch main", you left the number out.
+
       Clone in full — `gh pr checkout` cannot set up branch tracking against a
       shallow clone.
           cd /workspace
           gh repo clone "$TARGET_REPO" taskflow
           cd taskflow
-          gh pr checkout "$PR_NUMBER"
+          gh pr checkout <PR number>
 
       `gh` is authenticated from $GITHUB_TOKEN. `jq` is NOT installed — use
       `python3 -m json.tool` for JSON.
@@ -71,7 +78,7 @@ skills:
       Read `AGENTS.md` in the repo root. Those numbered rules are the criteria.
       Then read the diff:
 
-          gh pr diff "$PR_NUMBER"
+          gh pr diff <PR number>
 
       ## 3. Verify the claim rather than trusting it
       The PR body asserts the change works. Check it yourself:
@@ -114,7 +121,7 @@ skills:
           with a human.*
           MD
 
-          gh pr review "$PR_NUMBER" --comment --body-file /tmp/verdict.md
+          gh pr review <PR number> --comment --body-file /tmp/verdict.md
 
       Use `--comment`, not `--approve` or `--request-changes`. Both agents share
       one GitHub identity in this demo, and GitHub refuses a formal review from

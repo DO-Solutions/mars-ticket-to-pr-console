@@ -181,6 +181,21 @@ whose event stream replays from the beginning on every connect. The console
 records the session's latest `seq` before firing and ignores anything at or
 below it. If you drive a reused session by hand, apply the same watermark.
 
+**A pull request gets no review, and the reviewer trigger's executions sit in
+`pending`.** An earlier execution is stuck in `running` — its session is gone
+but the execution never finished — and executions on a trigger are serialised,
+so everything behind it waits. Check with:
+
+```bash
+doctl harness-runtime triggers list-executions <reviewer-trigger-id>
+```
+
+Executions cannot be cancelled, and pausing/resuming only clears the `pending`
+entries. Recovery is to recreate the reviewer trigger and re-paste its webhook
+secret into the repository. To avoid it, do not let the trigger fire for events
+you do not intend to act on: the reset leaves the reviewer paused for exactly
+this reason, and dispatch re-arms it.
+
 **Branch names drift to `-v2`, `-v3`.** Stale branches from earlier runs were
 left in the warm session's workspace, so `git switch -c` hit a name that already
 existed. Step 1 of the fixer's skill now deletes local `agent/*` branches. Note

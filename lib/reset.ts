@@ -108,17 +108,16 @@ async function deleteAgentBranches(warnings: string[]): Promise<number> {
 }
 
 /**
- * Remove leftover reviewer sandboxes.
+ * Remove leftover agent sandboxes.
  *
- * Fresh-mode sessions destroy themselves when their run ends, so this is
- * normally a no-op — it only catches one that is still winding down. It must
- * never touch the warm fixer session, which the fixer trigger is bound to:
- * deleting that breaks the demo until setup-mars.sh is run again.
+ * Both agents run in fresh mode now, and a fresh session destroys itself when
+ * its run ends, so this is normally a no-op — it only catches one still winding
+ * down. Every agent sandbox is named `ht-exec-*`, and nothing long-lived needs
+ * protecting any more.
  */
 async function removeOrphanSessions(warnings: string[]): Promise<number> {
   const token = process.env.DO_API_TOKEN;
   if (!token) return 0;
-  const keep = process.env.MARS_FIXER_SESSION_ID;
   let removed = 0;
 
   try {
@@ -137,7 +136,6 @@ async function removeOrphanSessions(warnings: string[]): Promise<number> {
       const isReviewerSandbox = (s.name ?? '').startsWith('ht-exec-');
       const isDestroyed = (s.status ?? '').includes('DESTROYED');
       if (!isReviewerSandbox || isDestroyed) continue;
-      if (keep && s.session_id === keep) continue; // never the bound fixer session
 
       const r = await fetch(`${MARS}/sessions/${s.session_id}`, {
         method: 'DELETE',

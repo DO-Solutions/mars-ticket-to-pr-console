@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fireTrigger, setTriggerStatus } from '@/lib/mars';
+import { fireTrigger, setTriggerStatus, waitForExecutionSession } from '@/lib/mars';
 import { consumeSession } from '@/lib/consume';
 import { watchReviewer } from '@/lib/watch-reviewer';
-import { createRun, getTicket, moveTicket, addComment } from '@/lib/store';
+import { createRun, getTicket, moveTicket, addComment, updateRun } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,14 +19,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
   };
   const triggerId = conf('MARS_FIXER_TRIGGER_ID');
   const secret = conf('MARS_FIXER_TRIGGER_SECRET');
-  const sessionId = conf('MARS_FIXER_SESSION_ID');
-  if (!triggerId || !secret || !sessionId) {
+  if (!triggerId || !secret) {
     return NextResponse.json(
       {
         error:
-          'MARS is not configured on this app. Set MARS_FIXER_TRIGGER_ID, ' +
-          'MARS_FIXER_TRIGGER_SECRET and MARS_FIXER_SESSION_ID from the output of ' +
-          'scripts/setup-mars.sh.',
+          'MARS is not configured on this app. Set MARS_FIXER_TRIGGER_ID and ' +
+          'MARS_FIXER_TRIGGER_SECRET from the output of scripts/setup-mars.sh.',
       },
       { status: 500 },
     );
@@ -56,14 +54,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 502 });
   }
 
-  // The fixer trigger runs in reuse mode, so its session ID is known before the
-  // webhook fires and we can follow the run from its first event. The session is
-  // not destroyed afterwards either, so its transcript stays replayable.
+  // The run exists before its sandbox does: with a fresh-mode trigger the
+  // session is created by the firing, so record the run now and attach as soon
+  // as the execution tells us where it landed.
   createRun({
     id: executionId,
     role: 'fixer',
     ticket: ticket.key,
-    sessionId,
     status: 'running',
     startedAt: Date.now(),
     feed: [],
@@ -72,7 +69,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     costMicros: 0,
   });
 
-  void consumeSession(executionId, sessionId, { triggerId });
+  void (async () => {
+    const sessionId = await waitForExecutionSession(triggerId, executionId);
+    if (!sessionId) {
+      console.error(`[dispatch ${executionId}] execution never reported a session`);
+      updateRun(executionId, { status: 'failed', error: 'the run never started a sandbox' });
+      return;
+    }
+    console.log(`[dispatch ${executionId}] sandbox ${sessionId}`);
+    updateRun(executionId, { sessionId });
+    await consumeSession(executionId, sessionId, { triggerId });
+  })();
   watchReviewer(ticket.key);
 
   moveTicket(ticket.key, 'in_progress');
@@ -82,5 +89,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     at: Date.now(),
   });
 
-  return NextResponse.json({ ok: true, runId: executionId, sessionId });
+  return NextResponse.json({ ok: true, runId: executionId });
 }

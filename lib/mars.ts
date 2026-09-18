@@ -62,6 +62,29 @@ export async function listExecutions(triggerId: string): Promise<Execution[]> {
   return Array.isArray(json) ? json : (json.executions ?? []);
 }
 
+/**
+ * Wait for a just-fired execution to report the session it is running in.
+ *
+ * With a fresh-mode trigger the sandbox does not exist until the trigger fires,
+ * so the session id has to be collected afterwards. Polling the execution by id
+ * is precise — no scanning of history — and it usually appears within a couple
+ * of seconds.
+ */
+export async function waitForExecutionSession(
+  triggerId: string,
+  executionId: string,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<string | null> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 90_000);
+  while (Date.now() < deadline) {
+    const ex = await getExecution(triggerId, executionId);
+    if (ex?.session_id) return ex.session_id;
+    if (ex && (ex.status === 'failed' || ex.status === 'succeeded') && !ex.session_id) return null;
+    await new Promise((r) => setTimeout(r, opts.intervalMs ?? 1000));
+  }
+  return null;
+}
+
 export async function getExecution(triggerId: string, executionId: string): Promise<Execution | undefined> {
   const all = await listExecutions(triggerId);
   return all.find((e) => e.execution_id === executionId);

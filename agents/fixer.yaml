@@ -1,20 +1,25 @@
 # Fixer agent — takes a TaskFlow ticket and opens a pull request that resolves it.
 #
-# This manifest creates the WARM session that the fixer trigger binds to in
-# reuse mode. Reuse is deliberate: a bound session's ID is known before the
-# webhook fires, so the console attaches to the event stream first and cannot
-# miss the start of a run, and the warm workspace keeps the repo cloned and
-# node_modules installed between runs.
+# Used as the session template for a FRESH webhook trigger: every dispatch gets
+# its own sandbox, which is then destroyed. That is deliberate. A reused session
+# keeps its conversation history, so the agent carries every previous ticket into
+# the next one — which inflates context, and led it to invent branch names like
+# `-v2` and `-v10` because it remembered the earlier ones.
 #
-# Create with:
-#   doctl harness-runtime create agents/fixer.yaml \
+# The cost is a clone and an `npm ci` on every run, roughly twenty seconds. The
+# benefit is that every run starts identically, which matters more for a demo.
+#
+# Create the trigger with:
+#   doctl harness-runtime triggers create --kind webhook --name taskflow-fixer \
+#     --session-mode fresh --spec agents/fixer.yaml --provider custom \
+#     --prompt "$(cat prompts/fixer.tmpl)" --output-mode none \
 #     --secret HARNESS_INFERENCE_API_KEY=@~/.secrets/do-inference.key \
 #     --secret GITHUB_TOKEN=@~/.secrets/taskflow-pat \
 #     --secret CONSOLE_TOKEN=@~/.secrets/console-callback
 name: taskflow-fixer
 agent: opencode
 size: mv-2vcpu-4gb
-persistent_workspace: true
+persistent_workspace: false
 
 env:
   HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
@@ -60,22 +65,13 @@ skills:
 
       Work through these steps in order. Do not skip the reproduce step.
 
-      ## 1. Get a clean workspace
-      The workspace persists between runs, so always reset it first:
+      ## 1. Get the code
+      This sandbox is new, so clone and install:
 
           cd /workspace
-          if [ -d taskflow/.git ]; then
-            cd taskflow && git fetch origin --prune && git checkout main \
-              && git reset --hard origin/main && git clean -fd
-            # Delete branches left by earlier runs, and prune remote-tracking
-            # refs for branches that no longer exist. Without both, the branch
-            # name drifts to `...-v2`, `...-v3` and upwards on every run,
-            # because the names still look taken.
-            git branch --list 'agent/*' | tr -d ' *' | xargs -r -n1 git branch -D
-          else
-            gh repo clone "$TARGET_REPO" taskflow && cd taskflow
-          fi
-          [ -d node_modules ] || npm ci
+          gh repo clone "$TARGET_REPO" taskflow
+          cd taskflow
+          npm ci
 
       `gh` is already authenticated from $GITHUB_TOKEN. Note `jq` is NOT
       installed — use `python3 -m json.tool` or `python3 -c` for JSON.
@@ -107,9 +103,7 @@ skills:
 
       ## 6. Commit and push
       Branch and commit per AGENTS.md. Use exactly `agent/TF-<number>-<slug>`
-      with no numeric suffix — step 1 cleared any older branch of that name, so
-      do not add `-v2` or similar even if git history suggests it was used
-      before:
+      with no numeric suffix:
 
           git switch -c "agent/TF-<number>-<short-slug>"
           git add -A

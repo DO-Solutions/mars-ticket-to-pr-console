@@ -23,6 +23,9 @@ if [ -z "${CONSOLE_URL:-}" ]; then
   exit 1
 fi
 export CONSOLE_URL
+# Which repo the agents clone and open PRs against. Override to point the demo
+# at a different copy (e.g. a personal mirror while an org token is pending).
+export TARGET_REPO="${TARGET_REPO:-DO-Solutions/mars-ticket-to-pr-taskflow}"
 export CONSOLE_HOST="${CONSOLE_URL#https://}"
 CONSOLE_HOST="${CONSOLE_HOST#http://}"
 export CONSOLE_HOST="${CONSOLE_HOST%%/*}"
@@ -32,6 +35,7 @@ for f in "$INFERENCE_KEY" "$GITHUB_PAT" "$CALLBACK_TOKEN"; do
 done
 
 echo "==> console: $CONSOLE_URL (host $CONSOLE_HOST)"
+echo "==> target repo: $TARGET_REPO"
 
 SECRET_FLAGS=(
   --secret "HARNESS_INFERENCE_API_KEY=@$INFERENCE_KEY"
@@ -115,7 +119,7 @@ cat <<OUT
 Set these on the console app (App Platform > Settings > env):
 
   DO_API_TOKEN=<a DO PAT with full access>
-  TARGET_REPO=DO-Solutions/mars-ticket-to-pr-taskflow
+  TARGET_REPO=$TARGET_REPO
   GITHUB_TOKEN=<read-only fine-grained PAT for the taskflow repo>
   AGENT_CALLBACK_TOKEN=$(cat "$CALLBACK_TOKEN")
   MARS_FIXER_SESSION_ID=$FIXER_SESSION_ID

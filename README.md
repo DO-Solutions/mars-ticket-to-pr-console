@@ -153,7 +153,19 @@ egress allowlist in the manifests is built from that host.
 | `MARS_FIXER_SESSION_ID` | the warm session the console streams |
 | `MARS_FIXER_TRIGGER_ID` / `_SECRET` | dispatch target and its signing secret |
 | `MARS_REVIEWER_TRIGGER_ID` | polled to discover review runs |
-| `TARGET_REPO` | defaults to `DO-Solutions/mars-ticket-to-pr-taskflow` |
+| `TARGET_REPO` | the repo the agents clone and open PRs against; defaults to `DO-Solutions/mars-ticket-to-pr-taskflow` |
+
+`TARGET_REPO` is the single switch that points the demo at a different copy of
+the target repo. It is read by the console, by `scripts/reset-demo.sh`, and —
+via `${TARGET_REPO}` expansion at session-create time — by both agent
+manifests. Set it once in the environment before running `setup-mars.sh` and
+everything follows.
+
+A note on why that switch exists: the agents need **write** access to the target
+repo, which means a token. In a SAML-enforced org a fine-grained token may need
+administrator approval, which can take days. Pointing `TARGET_REPO` at a mirror
+you own (`TARGET_REPO=<you>/mars-ticket-to-pr-taskflow`) lets the demo run
+end to end in the meantime, and flipping it back later is one variable.
 
 ## Notes
 

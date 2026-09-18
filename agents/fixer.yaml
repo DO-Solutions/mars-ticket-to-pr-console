@@ -19,7 +19,7 @@ persistent_workspace: true
 env:
   HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
   HARNESS_INFERENCE_MODEL: deepseek-v4-pro
-  TARGET_REPO: DO-Solutions/mars-ticket-to-pr-taskflow
+  TARGET_REPO: "${TARGET_REPO}"
   CONSOLE_URL: "${CONSOLE_URL}"
 
 secrets:

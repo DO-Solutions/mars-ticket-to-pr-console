@@ -72,8 +72,12 @@ visible after the session is gone.
 - `doctl` **beta** build with `harness-runtime` (≥ 1.168.0-beta.6) — the agent
   commands are not in the standard release
 - the right team: `doctl auth switch --context "solutions demos"`
-- `gh` authenticated, and SSO-authorised for the `DO-Solutions` org
 - Managed Agents enabled on the team
+- A GitHub token with write access to the taskflow repo, **SSO-authorised** if
+  the org enforces SAML. Note that SAML enforcement applies to the *token*, not
+  the repository: an unauthorised token is refused on org resources even when
+  the repo is public. Unauthenticated reads and SSH git are unaffected, which is
+  why `scripts/reset-demo.sh` needs no token.
 
 ### 2. Credentials
 
@@ -99,6 +103,13 @@ create time and are never written into the repo or returned by the API.
 
 ```bash
 doctl apps create --spec .do/app.yaml
+```
+
+The spec deploys from a public git clone URL, which needs no GitHub App
+installation on the org. There is therefore no deploy-on-push — redeploy with:
+
+```bash
+./scripts/deploy.sh
 ```
 
 ### 4. Wire up MARS

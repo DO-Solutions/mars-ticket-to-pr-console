@@ -200,25 +200,24 @@ export async function consumeSession(
   /*
    * The stream ended without a run.completed.
    *
-   * That happens: an agent can stop mid-turn after its last tool call and the
-   * platform may never emit the completion frame, and a dropped connection
-   * looks identical from here. Either way the run would otherwise sit at
-   * "running" forever with a frozen feed, which reads as the demo being stuck.
-   *
-   * The trigger execution is the authority on whether the work finished, so ask
-   * it rather than guessing.
+   * This does NOT mean the run finished. Runs have taken anywhere from 45
+   * seconds to five and a half minutes, and a long model turn produces no
+   * events at all, so a dropped connection and a working agent look identical
+   * from here. The trigger execution is the only authority on whether the work
+   * finished — so ask it, and never guess.
    */
   const run = getRun(runId);
   if (!run || run.status !== 'running') return;
 
   const triggerId = opts.triggerId;
   if (!triggerId) {
-    console.warn(`[consume ${runId}] stream ended with no completion and no trigger to reconcile against`);
-    updateRun(runId, { status: 'succeeded', endedAt: Date.now() });
+    // Nothing authoritative to ask. Say so rather than inventing an outcome.
+    console.warn(`[consume ${runId}] stream ended, no trigger to reconcile against`);
+    updateRun(runId, { error: 'event stream ended early; outcome unknown' });
     return;
   }
 
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 120; i++) {
     const ex = await getExecution(triggerId, runId);
     if (ex && ex.status !== 'running' && ex.status !== 'pending') {
       console.log(`[consume ${runId}] reconciled from execution: ${ex.status}`);
@@ -231,6 +230,9 @@ export async function consumeSession(
     }
     await new Promise((r) => setTimeout(r, 5000));
   }
-  console.warn(`[consume ${runId}] execution still unfinished after reconcile window`);
-  updateRun(runId, { status: 'succeeded', endedAt: Date.now() });
+
+  // Ten minutes and the execution still is not terminal. Leave the run as
+  // running and flag it, rather than claiming an outcome we do not have.
+  console.warn(`[consume ${runId}] execution still not terminal after 10 min`);
+  updateRun(runId, { error: 'lost the event stream; still running per the platform' });
 }

@@ -131,6 +131,53 @@ export type FeedTab = { id: string; label: string; run?: Run };
  * the pull request the fixer opens — so a single large pane reads far better
  * than two cramped ones, and it follows the active run on its own.
  */
+function Elapsed({ run }: { run: Run }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (run.status !== 'running') return;
+    const iv = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, [run.status]);
+
+  const end = run.endedAt ?? now;
+  const secs = Math.max(0, Math.round((end - run.startedAt) / 1000));
+  const mins = Math.floor(secs / 60);
+  return <span className="mono text-xs text-muted">{mins ? `${mins}m ${secs % 60}s` : `${secs}s`}</span>;
+}
+
+/**
+ * A long model turn emits no events, so silence is normal and must not look
+ * like a hang. Runs here have taken from 45 seconds to five and a half
+ * minutes.
+ */
+function Thinking({ run }: { run: Run }) {
+  const [quietFor, setQuietFor] = useState(0);
+  const last = run.feed.length;
+  const stamp = useRef(Date.now());
+
+  useEffect(() => {
+    stamp.current = Date.now();
+    setQuietFor(0);
+  }, [last]);
+
+  useEffect(() => {
+    if (run.status !== 'running') return;
+    const iv = setInterval(() => setQuietFor(Math.round((Date.now() - stamp.current) / 1000)), 1000);
+    return () => clearInterval(iv);
+  }, [run.status]);
+
+  if (run.status !== 'running' || quietFor < 12) return null;
+  return (
+    <div className="feed-item flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-edge bg-raised">
+      <span className="h-2 w-2 rounded-full bg-amber live-dot shrink-0" aria-hidden />
+      <span className="text-sm text-secondary">
+        Model is working — no output for {quietFor}s. Long turns are normal; runs have taken up to
+        five minutes.
+      </span>
+    </div>
+  );
+}
+
 export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
   const [selected, setSelected] = useState(tabs[0]?.id);
   const [userPicked, setUserPicked] = useState(false);
@@ -186,6 +233,7 @@ export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
         })}
 
         <span className="ml-auto flex items-center gap-3">
+          {run && <Elapsed run={run} />}
           {run && run.tokensIn > 0 && (
             <span className="mono text-xs text-muted">
               {(run.tokensIn / 1000).toFixed(1)}k in / {run.tokensOut.toLocaleString()} out
@@ -218,6 +266,7 @@ export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
         {run?.feed.map((item, i) => (
           <Item key={i} item={item} />
         ))}
+        {run && <Thinking run={run} />}
         {run?.status === 'failed' && (
           <div className="rounded-lg border border-red/60 bg-red/10 px-3 py-2.5 text-base text-red">
             Run failed{run.error ? `: ${run.error}` : ''}

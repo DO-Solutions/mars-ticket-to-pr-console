@@ -57,8 +57,10 @@ skills:
       it no benefit of the doubt. Judge it against the repo's own written rules.
 
       ## 1. Fetch the change
+      Clone in full — `gh pr checkout` cannot set up branch tracking against a
+      shallow clone.
           cd /workspace
-          gh repo clone "$TARGET_REPO" taskflow -- --depth 50
+          gh repo clone "$TARGET_REPO" taskflow
           cd taskflow
           gh pr checkout "$PR_NUMBER"
 
@@ -94,15 +96,34 @@ skills:
         (rules 9, 10, 11)
 
       ## 5. Post the verdict
-      Approve only if every applicable rule is satisfied and the tests pass.
-      Be specific: cite the rule number and the file and line.
 
-          gh pr review "$PR_NUMBER" --approve --body "<verdict>"
-          # or
-          gh pr review "$PR_NUMBER" --request-changes --body "<verdict>"
+      Post it with `--comment`, and start the body with the verdict on its own
+      line:
 
-      Structure the body as a short verdict line, then **What I checked**, then
-      **Findings** (empty if none). Do not pad it with praise.
+          cat > /tmp/verdict.md <<'MD'
+          ## APPROVED
+          <or: ## CHANGES REQUESTED>
+
+          **What I checked**
+          - <the rules you applied, and what you ran>
+
+          **Findings**
+          - <one per issue, citing the rule number and the file and line — omit if none>
+
+          *Automated review by the MARS reviewer agent. The merge decision stays
+          with a human.*
+          MD
+
+          gh pr review "$PR_NUMBER" --comment --body-file /tmp/verdict.md
+
+      Use `--comment`, not `--approve` or `--request-changes`. Both agents share
+      one GitHub identity in this demo, and GitHub refuses a formal review from
+      the pull request's own author. The verdict on the first line is what the
+      board reads, so it carries the same weight — this is by design, not a
+      failure, and should not be described as one.
+
+      Approve only if every applicable rule is satisfied and the tests pass. Be
+      specific and do not pad it with praise.
 
       ## 6. Report back to the board
       Write the verdict to a file first so no quoting can go wrong:

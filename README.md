@@ -196,14 +196,18 @@ pause it, create the fixer trigger bound to the new session, then update
 `MARS_FIXER_TRIGGER_SECRET` on the app. The reviewer trigger is unaffected, so
 the GitHub webhook stays valid.
 
-**The review shows as a comment, not a formal approval.** GitHub refuses
-`APPROVED` and `CHANGES_REQUESTED` when the reviewer is the pull request's own
-author, and by default both agents authenticate with the same token. The
-reviewer states its verdict on the first line of the review and the console
-renders that, so the demo still shows an approve / request-changes outcome — but
-GitHub's own badge will not appear. Give the reviewer its own GitHub account and
-PAT to restore genuine review states; the partner guide recommends a dedicated
-account for exactly this kind of reason.
+**The review is posted as a comment, not a formal approval.** This is
+deliberate. GitHub refuses `APPROVED` and `CHANGES_REQUESTED` when the reviewer
+is the pull request's own author, and both agents share one GitHub identity
+here. The reviewer therefore posts with `gh pr review --comment` and puts the
+verdict on the first line as `## APPROVED` or `## CHANGES REQUESTED`, which the
+console reads for its verdict badge.
+
+Do not instruct the agent to try `--approve` first. That call can never succeed
+in this configuration, so whether anything gets posted then depends on the agent
+improvising a fallback — which it sometimes did and sometimes did not, leaving
+pull requests with no review at all. Give the reviewer its own GitHub account
+and PAT to restore genuine review states.
 
 **A reviewer session appears during a reset.** Closing a pull request is also a
 `pull_request` event, and GitHub's UI cannot filter by action. The reviewer

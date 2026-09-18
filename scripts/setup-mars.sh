@@ -44,64 +44,23 @@ SECRET_FLAGS=(
 )
 
 # ---------------------------------------------------------------------------
-# 1. The warm fixer session.
-#
-# The fixer trigger runs in reuse mode, which needs a session that already
-# exists and is paused. This is deliberate: a fresh trigger session is destroyed
-# the instant its run ends and its transcript becomes unretrievable, so the
-# console could never reliably stream it. A bound session's ID is known up
-# front, so the UI attaches before the webhook fires.
+# Both agents run in fresh mode: each firing creates its own sandbox and
+# destroys it afterwards, so there is no long-lived session to build or warm.
+# A reused session keeps its conversation history, which made the agent carry
+# previous tickets into later runs.
 # ---------------------------------------------------------------------------
-# Removing a session that a reuse trigger is bound to deletes the trigger too,
-# so this script reuses an existing session rather than replacing it. To pick up
-# a manifest change you must remove the session, recreate it, and then recreate
-# the fixer trigger bound to the new one.
-echo "==> creating the warm fixer session"
-if doctl harness-runtime show taskflow-fixer >/dev/null 2>&1; then
-  echo "    taskflow-fixer already exists — reusing it"
-else
-  doctl harness-runtime create agents/fixer.yaml "${SECRET_FLAGS[@]}" --interactive=false
-fi
-
-FIXER_SESSION_ID="$(doctl harness-runtime show taskflow-fixer -o json | python3 -c '
-import json,sys
-d=json.load(sys.stdin)
-s=d[0] if isinstance(d,list) else d.get("session",d)
-print(s["session_id"])')"
-echo "    session: $FIXER_SESSION_ID"
-
-# Warm the workspace so the first demo run is not the one that pays for the
-# clone and npm install.
-echo "==> warming the workspace (clone + npm ci)"
-# `exec` runs as root but the agent runs as uid 10001 (`agent`), so anything
-# created here must be handed over or the agent hits git's "dubious ownership"
-# check and wastes the first run re-cloning.
-doctl harness-runtime exec taskflow-fixer -- sh -c "
-  set -e
-  cd /workspace
-  if [ ! -d taskflow/.git ]; then gh repo clone '$TARGET_REPO' taskflow; fi
-  cd taskflow
-  git config --global --add safe.directory /workspace/taskflow
-  git fetch origin main -q
-  [ -d node_modules ] || npm ci --silent
-  chown -R 10001:10001 /workspace/taskflow
-  echo \"workspace ready: \$(git rev-parse --short HEAD), owned by \$(stat -c %U /workspace/taskflow)\"
-" || echo "    (warm-up failed — check the GITHUB_TOKEN secret and TARGET_REPO)"
-
-echo "==> pausing it so a reuse trigger can bind"
-doctl harness-runtime pause taskflow-fixer >/dev/null
-sleep 3
 
 # ---------------------------------------------------------------------------
 # 2. Triggers.
 # ---------------------------------------------------------------------------
-echo "==> creating the fixer trigger (webhook, reuse, custom signature)"
+echo "==> creating the fixer trigger (webhook, fresh, custom signature)"
 FIXER_TRIGGER_JSON="$(doctl harness-runtime triggers create \
   --kind webhook --name taskflow-fixer \
-  --session-mode reuse --bound-session-id "$FIXER_SESSION_ID" \
+  --session-mode fresh --spec agents/fixer.yaml \
   --provider custom \
   --prompt "$(cat prompts/fixer.tmpl)" \
-  --output-mode none -o json)"
+  --output-mode none \
+  "${SECRET_FLAGS[@]}" -o json)"
 
 echo "==> creating the reviewer trigger (webhook, fresh, github signature)"
 REVIEWER_TRIGGER_JSON="$(doctl harness-runtime triggers create \
@@ -134,7 +93,6 @@ Set these on the console app (App Platform > Settings > env):
   TARGET_REPO=$TARGET_REPO
   GITHUB_TOKEN=<PAT for the taskflow repo; read is enough for the console>
   AGENT_CALLBACK_TOKEN=$(cat "$CALLBACK_TOKEN")
-  MARS_FIXER_SESSION_ID=$FIXER_SESSION_ID
   MARS_FIXER_TRIGGER_ID=$FIXER_TRIGGER_ID
   MARS_FIXER_TRIGGER_SECRET=$FIXER_SECRET
   MARS_REVIEWER_TRIGGER_ID=$REVIEWER_TRIGGER_ID

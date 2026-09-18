@@ -52,18 +52,32 @@ Console reads back:  GET /v2/agents/sessions/{id}/events   (SSE, live)
                      GET /v2/agents/triggers/{id}/executions
 ```
 
-### Why the fixer reuses a session and the reviewer does not
+### Why both agents use fresh sessions
 
-The fixer trigger runs in **reuse** mode, bound to a long-lived paused session.
-Its session ID is therefore known before the webhook fires, so the console can
-attach to the event stream first and cannot miss the start of a run — and the
-warm workspace keeps the repo cloned and `node_modules` installed, which makes
-runs noticeably faster on camera.
+Both triggers run in `fresh` mode: every firing gets its own sandbox, which is
+destroyed when the run ends.
 
-The reviewer stays **fresh** on purpose: an independent reviewer should start
-from a clean checkout with no memory of how the fix was written. The console
-folds its events into its own store as they stream, so the run is still fully
-visible after the session is gone.
+A reused session is tempting, because its workspace stays warm and its id is
+known before the trigger fires. But it also keeps its **conversation history**,
+so the agent carries every previous ticket into the next run. That inflates
+context and causes real misbehaviour — branch names drifted to `-v2`, then
+`-v10`, because the agent remembered the names it had used before. Measured
+side by side on the same ticket, a reused session took 333s while a fresh one
+took 127s, with steadier output.
+
+Three consequences worth knowing:
+
+- **A clone and `npm ci` on every run**, roughly twenty seconds.
+- **The session id arrives after the firing**, so `POST /api/tickets/[key]/dispatch`
+  records the run, polls the execution until it reports a session, then attaches.
+- **The transcript dies with the sandbox**, so the console persists events as
+  they stream. That is also why `scripts/capture-run.sh` can no longer snapshot a
+  fixer run: the existing fixture in `fixtures/` stays valid for offline replay,
+  and refreshing it means temporarily pointing the trigger at a reuse session.
+
+`checkpoint` + `rollback` is a viable middle path — rewinding a warm session to a
+clean checkpoint takes about 6s and preserves the session id — if the twenty
+seconds per run ever matters more than the simplicity.
 
 ## Setup
 

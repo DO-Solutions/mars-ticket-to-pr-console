@@ -104,7 +104,10 @@ export function appendFeed(id: string, item: FeedItem): void {
   // feed reads as prose instead of hundreds of one-token rows.
   const last = r.feed[r.feed.length - 1];
   if (item.kind === 'text' && last?.kind === 'text' && last.reasoning === item.reasoning) {
-    last.text += item.text;
+    // The agent emits runs of 20+ newlines between tool calls. Kept verbatim
+    // they leave the feed looking mostly empty, so collapse any run of three
+    // or more into a single blank line.
+    last.text = `${last.text}${item.text}`.replace(/\n{3,}/g, '\n\n');
     return;
   }
 

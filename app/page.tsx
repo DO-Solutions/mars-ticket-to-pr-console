@@ -4,15 +4,28 @@ import { useCallback, useEffect, useState } from 'react';
 import { Board } from '@/components/Board';
 import { AgentFeed } from '@/components/AgentFeed';
 import { Outcome } from '@/components/Outcome';
-import { Guardrails } from '@/components/Guardrails';
+import { AgentsTab } from '@/components/AgentsTab';
 import type { Ticket } from '@/lib/seed';
 import type { Run } from '@/lib/store';
 
+type ResetSummary = {
+  ok: boolean;
+  prsClosed?: number;
+  branchesDeleted?: number;
+  sessionsRemoved?: number;
+  warnings?: string[];
+  error?: string;
+};
+
 export default function Page() {
+  const [tab, setTab] = useState<'board' | 'agents'>('board');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<ResetSummary>();
+  const [targetRepo, setTargetRepo] = useState<string>();
   const [err, setErr] = useState<string>();
 
   const refresh = useCallback(async () => {
@@ -22,15 +35,16 @@ export default function Page() {
         fetch('/api/runs', { cache: 'no-store' }).then((x) => x.json()),
       ]);
       setTickets(t.tickets ?? []);
+      setTargetRepo(t.targetRepo);
       setRuns(r.runs ?? []);
       if (!selected && t.tickets?.length) setSelected(t.tickets[0].key);
     } catch {
-      /* transient — the next tick will pick it up */
+      /* transient — the next tick picks it up */
     }
   }, [selected]);
 
   // 700ms is fast enough that a streamed feed reads as live, without hammering
-  // the box during a recording.
+  // the instance during a recording.
   useEffect(() => {
     void refresh();
     const iv = setInterval(() => void refresh(), 700);
@@ -58,97 +72,140 @@ export default function Page() {
   };
 
   const reset = async () => {
-    await fetch('/api/demo/reset', { method: 'POST' });
-    void refresh();
+    setResetting(true);
+    setResetResult(undefined);
+    setErr(undefined);
+    try {
+      const res = await fetch('/api/demo/reset', { method: 'POST' });
+      setResetResult(await res.json());
+    } catch (e) {
+      setResetResult({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setResetting(false);
+      void refresh();
+    }
   };
 
-  // Offline fallback: replay a captured run through the same reducer a live
-  // session uses. MARS is a Private Preview with no SLA, so a recording should
-  // never be hostage to a live sandbox.
-  const replay = async () => {
-    if (!ticket) return;
-    await fetch('/api/demo/replay', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fixture: 'fixer-TF-104.sse', ticket: ticket.key, speed: 2 }),
-    });
-    void refresh();
-  };
-
-  const canDispatch = ticket && !busy && fixerRun?.status !== 'running';
+  const canDispatch = ticket && !busy && !resetting && fixerRun?.status !== 'running';
 
   return (
-    <main className="min-h-screen p-4 max-w-[1800px] mx-auto">
-      <header className="flex items-center gap-3 pb-4">
+    <main className="min-h-screen p-5 max-w-[1800px] mx-auto">
+      <header className="flex flex-wrap items-center gap-4 pb-4">
         <div>
-          <h1 className="text-[15px] font-semibold text-[#e6edf3]">TaskFlow Ops</h1>
-          <p className="text-[11px] text-[#5e6a80]">
+          <h1 className="text-xl font-semibold text-primary">TaskFlow Ops</h1>
+          <p className="text-sm text-muted pt-0.5">
             A ticket becomes a reviewed pull request — worked by agents on DigitalOcean Managed Agents
           </p>
         </div>
+
+        <nav className="flex items-center gap-1 ml-2" aria-label="Views">
+          {([
+            ['board', 'Board & runs'],
+            ['agents', 'Agents & guardrails'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              aria-current={tab === id}
+              className={`text-base px-3 py-1.5 rounded transition ${
+                tab === id ? 'bg-do-blue/20 text-primary font-medium' : 'text-muted hover:text-primary'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+
         <div className="ml-auto flex items-center gap-2">
           <button
-            onClick={replay}
-            title="Replay a captured run — no live sandbox needed"
-            className="mono text-[10px] px-2.5 py-1.5 rounded border border-[#26304a] text-[#8b97ad] hover:text-white hover:border-[#3a4763] transition"
-          >
-            replay (offline)
-          </button>
-          <button
             onClick={reset}
-            className="mono text-[10px] px-2.5 py-1.5 rounded border border-[#26304a] text-[#8b97ad] hover:text-white hover:border-[#3a4763] transition"
+            disabled={resetting}
+            title="Close agent PRs, delete their branches, clear the board"
+            className="text-sm px-3 py-1.5 rounded border border-edge text-muted hover:text-primary hover:border-edge-hi transition disabled:opacity-50"
           >
-            reset demo
+            {resetting ? 'resetting…' : 'reset demo'}
           </button>
           <button
             onClick={dispatch}
             disabled={!canDispatch}
-            className="text-[12px] font-medium px-3.5 py-1.5 rounded bg-[#0069ff] text-white hover:bg-[#1f7aff] disabled:opacity-30 disabled:cursor-not-allowed transition"
+            className="text-base font-medium px-4 py-1.5 rounded bg-do-blue text-white hover:brightness-110 disabled:opacity-30 disabled:cursor-not-allowed transition"
           >
-            {fixerRun?.status === 'running' ? 'Agent working…' : `Dispatch AI agent${ticket ? ` → ${ticket.key}` : ''}`}
+            {fixerRun?.status === 'running'
+              ? 'Agent working…'
+              : `Dispatch AI agent${ticket ? ` → ${ticket.key}` : ''}`}
           </button>
         </div>
       </header>
 
       {err && (
-        <div className="mb-3 rounded-md border border-[#f85149]/50 bg-[#f85149]/10 px-3 py-2 text-[11px] text-[#ff8b82]">
+        <div className="mb-3 rounded-lg border border-red/60 bg-red/10 px-3 py-2.5 text-base text-red">
           {err}
         </div>
       )}
 
-      <Board tickets={tickets} selected={selected} onSelect={setSelected} />
-
-      {ticket && (
-        <div className="mt-3 rounded-lg border border-[#1e2740] bg-[#0d1220] p-3">
-          <div className="flex items-start gap-2">
-            <span className="mono text-[12px] text-[#69a6ff]">{ticket.key}</span>
-            <span className="text-[13px] text-[#e6edf3] font-medium">{ticket.summary}</span>
-            <span className="ml-auto mono text-[10px] text-[#5e6a80]">reported by {ticket.reporter}</span>
-          </div>
-          <p className="text-[11.5px] leading-relaxed text-[#8b97ad] pt-2 whitespace-pre-wrap">{ticket.description}</p>
-          {ticket.expectsBlockedAction && (
-            <div className="mt-2 rounded border border-[#d29922]/40 bg-[#d29922]/10 px-2 py-1.5 text-[10.5px] text-[#f0c674]">
-              This ticket deliberately asks for something the agent policy denies — watch the feed refuse it and
-              report it rather than working around it.
-            </div>
+      {resetResult && (
+        <div
+          className={`mb-3 rounded-lg border px-3 py-2.5 text-base ${
+            resetResult.ok ? 'border-green/50 bg-green/10 text-green' : 'border-red/60 bg-red/10 text-red'
+          }`}
+        >
+          {resetResult.ok ? (
+            <>
+              Reset complete — {resetResult.prsClosed ?? 0} pull request(s) closed,{' '}
+              {resetResult.branchesDeleted ?? 0} branch(es) deleted,{' '}
+              {resetResult.sessionsRemoved ?? 0} session(s) removed.
+              {resetResult.warnings?.length ? (
+                <div className="text-sm text-amber pt-1.5">{resetResult.warnings.join(' · ')}</div>
+              ) : null}
+            </>
+          ) : (
+            <>Reset failed: {resetResult.error}</>
           )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3">
-        <div className="lg:col-span-2 grid grid-rows-2 gap-3 h-[620px]">
-          <AgentFeed run={fixerRun} label="Fixer agent — live session feed" />
-          <AgentFeed run={reviewerRun} label="Reviewer agent — independent session" />
-        </div>
-        <div className="space-y-3">
-          <Outcome ticket={ticket} />
-          <Guardrails />
-        </div>
-      </div>
+      {tab === 'agents' ? (
+        <AgentsTab targetRepo={targetRepo} />
+      ) : (
+        <>
+          <Board tickets={tickets} selected={selected} onSelect={setSelected} />
 
-      <footer className="pt-4 text-[10px] text-[#3f4859] text-center">
-        The board stands in for Jira — in production this is Action Gateway&apos;s Jira connector. Everything else
-        (sessions, tool calls, token counts, pull requests, reviews) is real.
+          {ticket && (
+            <div className="mt-3 rounded-lg border border-edge bg-panel p-3.5">
+              <div className="flex flex-wrap items-start gap-2.5">
+                <span className="mono text-base text-blue">{ticket.key}</span>
+                <span className="text-lg text-primary font-medium">{ticket.summary}</span>
+                <span className="ml-auto text-sm text-muted">reported by {ticket.reporter}</span>
+              </div>
+              <p className="text-base leading-relaxed text-secondary pt-2.5 whitespace-pre-wrap">
+                {ticket.description}
+              </p>
+              {ticket.expectsBlockedAction && (
+                <div className="mt-2.5 rounded-md border border-amber/50 bg-amber/10 px-3 py-2 text-sm text-amber">
+                  This ticket deliberately asks for something the agent policy denies. Watch the feed
+                  refuse it — and watch what it reaches for next.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 mt-3">
+            <div className="xl:col-span-2 h-[640px]">
+              <AgentFeed
+                tabs={[
+                  { id: 'fixer', label: 'Fixer agent', run: fixerRun },
+                  { id: 'reviewer', label: 'Reviewer agent', run: reviewerRun },
+                ]}
+              />
+            </div>
+            <Outcome ticket={ticket} />
+          </div>
+        </>
+      )}
+
+      <footer className="pt-5 text-sm text-subtle text-center">
+        The board stands in for Jira — in production this is Action Gateway&apos;s Jira connector.
+        Everything else (sessions, tool calls, token counts, pull requests, reviews) is real.
       </footer>
     </main>
   );

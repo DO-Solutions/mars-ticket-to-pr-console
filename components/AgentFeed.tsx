@@ -1,44 +1,69 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Run, FeedItem } from '@/lib/store';
+import { Markdown } from './Markdown';
 
-function Dur({ ms }: { ms?: number }) {
+function duration(ms?: number): string | null {
   if (ms === undefined) return null;
-  return <span className="mono text-[10px] text-[#5e6a80]">{ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}</span>;
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** The most telling field of a tool's input, rather than the whole blob. */
+function describeInput(input: unknown): string {
+  if (!input) return '';
+  if (typeof input === 'string') return input;
+  const i = input as Record<string, unknown>;
+  const first = i.command ?? i.cmd ?? i.path ?? i.file_path ?? i.pattern ?? i.queries ?? i.url;
+  return typeof first === 'string' ? first : JSON.stringify(first ?? i);
 }
 
 function ToolCard({ item }: { item: Extract<FeedItem, { kind: 'tool' }> }) {
+  const [open, setOpen] = useState(false);
   const pending = item.ok === undefined;
-  const arg = (() => {
-    const i = item.input as any;
-    if (!i) return '';
-    if (typeof i === 'string') return i;
-    // Show the most telling field rather than the whole blob.
-    const first = i.command ?? i.cmd ?? i.path ?? i.file_path ?? i.pattern ?? i.queries ?? i.url;
-    const s = typeof first === 'string' ? first : JSON.stringify(first ?? i);
-    return s.length > 220 ? `${s.slice(0, 220)}…` : s;
-  })();
+  const cmd = describeInput(item.input);
+  const out = item.summary ?? '';
+  // Only offer expansion when there is genuinely more to see.
+  const long = out.length > 300 || out.split('\n').length > 6;
+  const shown = open || !long ? out : out.slice(0, 300);
 
   return (
-    <div className="feed-item rounded-md border border-[#26304a] bg-[#101725] overflow-hidden">
-      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-[#151d2e]">
+    <div className="feed-item rounded-lg border border-edge bg-raised overflow-hidden">
+      <div className="flex items-center gap-2.5 px-3 py-2 border-b border-edge">
         <span
-          className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-            pending ? 'bg-[#d29922] live-dot' : item.ok ? 'bg-[#2ea043]' : 'bg-[#f85149]'
+          className={`h-2 w-2 rounded-full shrink-0 ${
+            pending ? 'bg-amber live-dot' : item.ok ? 'bg-green' : 'bg-red'
           }`}
+          aria-hidden
         />
-        <span className="mono text-[11px] text-[#c9d4e3]">{item.name || 'tool'}</span>
-        <span className="ml-auto flex items-center gap-2">
-          <Dur ms={item.durationMs} />
-          {!pending && !item.ok && <span className="mono text-[10px] text-[#ff8b82]">failed</span>}
+        <span className="mono text-sm text-primary font-medium">{item.name || 'tool'}</span>
+        <span className="ml-auto flex items-center gap-2.5">
+          {duration(item.durationMs) && (
+            <span className="mono text-xs text-muted">{duration(item.durationMs)}</span>
+          )}
+          {pending && <span className="text-xs text-amber">running</span>}
+          {!pending && !item.ok && <span className="text-xs text-red font-medium">blocked / failed</span>}
         </span>
       </div>
-      {arg && <pre className="mono text-[10.5px] leading-relaxed text-[#8b97ad] px-2.5 py-1.5 whitespace-pre-wrap break-all">{arg}</pre>}
-      {item.summary && (
-        <pre className="mono text-[10px] leading-relaxed text-[#6f7c93] px-2.5 pb-1.5 border-t border-[#1e2740] pt-1.5 whitespace-pre-wrap break-all max-h-24 overflow-hidden">
-          {item.summary.slice(0, 400)}
+
+      {cmd && (
+        <pre className="mono bg-code text-secondary px-3 py-2 whitespace-pre-wrap break-all border-b border-edge">
+          {cmd}
         </pre>
+      )}
+
+      {out && (
+        <div className="px-3 py-2">
+          <pre className="mono text-muted whitespace-pre-wrap break-all">{shown}</pre>
+          {long && (
+            <button
+              onClick={() => setOpen((v) => !v)}
+              className="mono text-xs text-blue hover:text-primary mt-1.5"
+            >
+              {open ? 'show less' : `show all (${out.length} chars)`}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -48,42 +73,48 @@ function Item({ item }: { item: FeedItem }) {
   switch (item.kind) {
     case 'prompt':
       return (
-        <div className="feed-item rounded-md border border-[#0069ff]/40 bg-[#0069ff]/10 px-2.5 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[#69a6ff] pb-1">Prompt delivered</div>
-          <div className="text-[11.5px] leading-relaxed text-[#c9d4e3] whitespace-pre-wrap">{item.text}</div>
+        <div className="feed-item rounded-lg border border-do-blue/60 bg-do-blue/10 px-3 py-2.5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-blue pb-1.5">
+            Prompt delivered
+          </div>
+          <div className="text-base leading-relaxed text-secondary whitespace-pre-wrap">{item.text}</div>
         </div>
       );
+
     case 'text':
-      return (
-        <div
-          className={`feed-item text-[12px] leading-relaxed whitespace-pre-wrap px-1 ${
-            item.reasoning ? 'text-[#7d8aa3] italic' : 'text-[#dbe4ef]'
-          }`}
-        >
-          {item.reasoning && <span className="mono text-[9px] not-italic text-[#5e6a80] pr-1.5">thinking</span>}
-          {item.text}
+      if (!item.text.trim()) return null;
+      return item.reasoning ? (
+        <div className="feed-item border-l-2 border-edge-hi pl-3">
+          <div className="mono text-xs uppercase tracking-wider text-subtle pb-1">thinking</div>
+          <div className="text-sm leading-relaxed text-muted whitespace-pre-wrap">{item.text}</div>
+        </div>
+      ) : (
+        <div className="feed-item px-0.5">
+          <Markdown text={item.text} />
         </div>
       );
+
     case 'tool':
       return <ToolCard item={item} />;
+
     case 'blocked':
       return (
-        <div className="feed-item rounded-md border border-[#f85149]/50 bg-[#f85149]/10 px-2.5 py-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[#ff8b82] pb-1">
+        <div className="feed-item rounded-lg border border-red/60 bg-red/10 px-3 py-2.5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-red pb-1.5">
             Blocked by policy
           </div>
-          <div className="mono text-[10.5px] leading-relaxed text-[#e0a3a0] whitespace-pre-wrap">{item.detail}</div>
+          <div className="mono text-secondary whitespace-pre-wrap">{item.detail}</div>
         </div>
       );
+
     case 'log':
-      return (
-        <div className="feed-item mono text-[10px] text-[#5e6a80] px-1 truncate">{item.message}</div>
-      );
+      return <div className="feed-item mono text-xs text-subtle px-0.5">{item.message}</div>;
+
     case 'done':
       return (
-        <div className="feed-item rounded-md border border-[#2ea043]/40 bg-[#2ea043]/10 px-2.5 py-2 flex items-center gap-3">
-          <span className="text-[11px] font-semibold text-[#7ee08f]">Run complete</span>
-          <span className="mono text-[10px] text-[#8b97ad]">
+        <div className="feed-item rounded-lg border border-green/50 bg-green/10 px-3 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="text-base font-semibold text-green">Run complete</span>
+          <span className="mono text-sm text-secondary">
             {item.tokensIn.toLocaleString()} in / {item.tokensOut.toLocaleString()} out
           </span>
         </div>
@@ -91,41 +122,89 @@ function Item({ item }: { item: FeedItem }) {
   }
 }
 
-export function AgentFeed({ run, label }: { run?: Run; label: string }) {
+export type FeedTab = { id: string; label: string; run?: Run };
+
+/**
+ * One tall pane showing whichever agent is active.
+ *
+ * The fixer and reviewer never run at the same time — the reviewer is woken by
+ * the pull request the fixer opens — so a single large pane reads far better
+ * than two cramped ones, and it follows the active run on its own.
+ */
+export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
+  const [selected, setSelected] = useState(tabs[0]?.id);
+  const [following, setFollowing] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const active = tabs.find((t) => t.run?.status === 'running');
+  const current = tabs.find((t) => t.id === selected) ?? tabs[0];
+  const run = current?.run;
   const count = run?.feed.length ?? 0;
 
+  // Follow whichever agent starts working, so nobody has to notice the handover.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [count]);
+    if (active && active.id !== selected) setSelected(active.id);
+  }, [active, selected]);
 
-  const running = run?.status === 'running';
+  useEffect(() => {
+    if (following) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [count, following]);
+
+  // Scrolling up should stop the view being yanked away mid-read.
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setFollowing(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
+  };
 
   return (
-    <div className="flex flex-col h-full rounded-lg border border-[#1e2740] bg-[#0d1220] overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#1e2740] bg-[#101725]">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8b97ad]">{label}</span>
-        {running && (
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#2ea043] live-dot" />
-            <span className="mono text-[10px] text-[#7ee08f]">live</span>
-          </span>
-        )}
-        {run && (
-          <span className="ml-auto mono text-[10px] text-[#5e6a80]">
-            {run.tokensIn > 0 && `${(run.tokensIn / 1000).toFixed(1)}k in · ${run.tokensOut} out`}
-          </span>
-        )}
+    <div className="flex flex-col h-full rounded-lg border border-edge bg-panel overflow-hidden">
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-edge bg-raised">
+        {tabs.map((t) => {
+          const isRunning = t.run?.status === 'running';
+          return (
+            <button
+              key={t.id}
+              onClick={() => setSelected(t.id)}
+              className={`flex items-center gap-2 text-sm px-2.5 py-1 rounded transition ${
+                t.id === current?.id
+                  ? 'bg-do-blue/20 text-primary font-medium'
+                  : 'text-muted hover:text-primary'
+              }`}
+            >
+              {t.label}
+              {isRunning && <span className="h-2 w-2 rounded-full bg-green live-dot" aria-label="live" />}
+            </button>
+          );
+        })}
+
+        <span className="ml-auto flex items-center gap-3">
+          {run && run.tokensIn > 0 && (
+            <span className="mono text-xs text-muted">
+              {(run.tokensIn / 1000).toFixed(1)}k in / {run.tokensOut.toLocaleString()} out
+            </span>
+          )}
+          {!following && (
+            <button
+              onClick={() => setFollowing(true)}
+              className="mono text-xs text-blue hover:text-primary"
+            >
+              jump to latest ↓
+            </button>
+          )}
+        </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-3 space-y-2.5">
         {!run && (
-          <div className="h-full grid place-items-center text-center px-6">
+          <div className="h-full grid place-items-center text-center px-8">
             <div>
-              <div className="text-[12px] text-[#5e6a80]">No run yet.</div>
-              <div className="text-[11px] text-[#465268] pt-1">
-                Pick a ticket and dispatch an agent — everything shown here is streamed from the
-                session's real event feed.
+              <div className="text-base text-muted">No run yet.</div>
+              <div className="text-sm text-subtle pt-1.5 max-w-md">
+                Pick a ticket and dispatch an agent. Everything here is streamed from the session&apos;s
+                own event feed — the reasoning, every tool call with its arguments and duration, and the
+                token count.
               </div>
             </div>
           </div>
@@ -134,7 +213,7 @@ export function AgentFeed({ run, label }: { run?: Run; label: string }) {
           <Item key={i} item={item} />
         ))}
         {run?.status === 'failed' && (
-          <div className="rounded-md border border-[#f85149]/50 bg-[#f85149]/10 px-2.5 py-2 text-[11px] text-[#ff8b82]">
+          <div className="rounded-lg border border-red/60 bg-red/10 px-3 py-2.5 text-base text-red">
             Run failed{run.error ? `: ${run.error}` : ''}
           </div>
         )}

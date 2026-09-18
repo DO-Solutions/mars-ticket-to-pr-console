@@ -52,8 +52,20 @@ export default function Page() {
   }, [refresh]);
 
   const ticket = tickets.find((t) => t.key === selected);
-  const fixerRun = runs.find((r) => r.ticket === selected && r.role === 'fixer');
-  const reviewerRun = runs.find((r) => r.ticket === selected && r.role === 'reviewer');
+  // Prefer a run that actually has something in it: a failed attach leaves an
+  // empty run behind, and showing that instead of the live one looks like the
+  // feed is broken.
+  const pick = (role: 'fixer' | 'reviewer') => {
+    const mine = runs.filter((r) => r.ticket === selected && r.role === role);
+    return (
+      mine.find((r) => r.status === 'running' && r.feed.length > 0) ??
+      mine.find((r) => r.feed.length > 0) ??
+      mine.find((r) => r.status === 'running') ??
+      mine[0]
+    );
+  };
+  const fixerRun = pick('fixer');
+  const reviewerRun = pick('reviewer');
 
   const dispatch = async () => {
     if (!ticket) return;

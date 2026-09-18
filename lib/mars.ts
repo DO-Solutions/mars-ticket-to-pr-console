@@ -49,6 +49,7 @@ export type Execution = {
   status: 'pending' | 'running' | 'succeeded' | 'failed';
   session_id?: string;
   failure_reason?: string;
+  created_at?: string;
 };
 
 export async function listExecutions(triggerId: string): Promise<Execution[]> {

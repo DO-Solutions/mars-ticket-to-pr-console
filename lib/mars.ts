@@ -67,6 +67,29 @@ export async function getExecution(triggerId: string, executionId: string): Prom
   return all.find((e) => e.execution_id === executionId);
 }
 
+/**
+ * Pause or re-arm a trigger.
+ *
+ * PATCH with a status body is the shape that works; PUT returns 405 and there
+ * is no /pause sub-resource.
+ */
+export async function setTriggerStatus(
+  triggerId: string,
+  status: 'active' | 'paused',
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${API}/triggers/${triggerId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    return res.ok ? null : `could not set trigger ${status} (${res.status})`;
+  } catch (e) {
+    return `could not set trigger ${status}: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 export type SessionStatus = string;
 
 export async function getSession(sessionId: string): Promise<{ status: SessionStatus; name?: string } | null> {

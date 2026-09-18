@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fireTrigger } from '@/lib/mars';
+import { fireTrigger, setTriggerStatus } from '@/lib/mars';
 import { consumeSession } from '@/lib/consume';
 import { watchReviewer } from '@/lib/watch-reviewer';
 import { createRun, getTicket, moveTicket, addComment } from '@/lib/store';
@@ -43,6 +43,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
       reporter: ticket.reporter,
     },
   };
+
+  // Reset leaves the reviewer trigger paused so that closing pull requests
+  // cannot spawn executions. Re-arm it here, so it is live for this run.
+  const reviewerTrigger = process.env.MARS_REVIEWER_TRIGGER_ID;
+  if (reviewerTrigger) await setTriggerStatus(reviewerTrigger, 'active');
 
   let executionId: string;
   try {

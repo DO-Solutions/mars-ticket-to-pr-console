@@ -1,3 +1,4 @@
+import { setTriggerStatus } from './mars';
 import { reset as resetStore } from './store';
 
 const GH = 'https://api.github.com';
@@ -8,6 +9,7 @@ export type ResetSummary = {
   prsClosed: number;
   branchesDeleted: number;
   sessionsRemoved: number;
+  reviewerPaused: boolean;
   warnings: string[];
 };
 
@@ -34,27 +36,6 @@ const timeout = () => AbortSignal.timeout(15_000);
  * already exits early on those actions, so this is an optimisation rather than
  * a correctness fix — hence best-effort.
  */
-async function setReviewerTrigger(status: 'active' | 'paused'): Promise<string | null> {
-  const id = process.env.MARS_REVIEWER_TRIGGER_ID;
-  const token = process.env.DO_API_TOKEN;
-  if (!id || !token) return null;
-
-  try {
-    // PATCH with a status body is the shape that works; PUT returns 405 and
-    // there is no /pause sub-resource. Verified against the live API.
-    const res = await fetch(`${MARS}/triggers/${id}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-      signal: timeout(),
-    });
-    if (res.ok) return null;
-    return `could not set the reviewer trigger to ${status} (${res.status})`;
-  } catch (e) {
-    return `could not set the reviewer trigger to ${status}: ${e instanceof Error ? e.message : String(e)}`;
-  }
-}
-
 /** Close every open pull request whose head branch is the agent's. */
 async function closeAgentPrs(warnings: string[]): Promise<number> {
   let closed = 0;
@@ -182,19 +163,36 @@ async function removeOrphanSessions(warnings: string[]): Promise<number> {
  */
 export async function resetDemo(): Promise<ResetSummary> {
   const warnings: string[] = [];
+  const reviewerTrigger = process.env.MARS_REVIEWER_TRIGGER_ID;
 
-  const pauseWarning = await setReviewerTrigger('paused');
-  if (pauseWarning) warnings.push(pauseWarning);
+  /*
+   * Pause the reviewer before touching GitHub, and leave it paused.
+   *
+   * Closing a pull request is itself a `pull_request` event, so a reset used to
+   * wake the reviewer for every PR it tidied up. Pausing and immediately
+   * resuming did not help: GitHub delivers the webhook a second or two later,
+   * by which time the trigger is active again.
+   *
+   * That mattered more than wasted tokens. Such a run finishes in seconds and
+   * its sandbox is destroyed, but the execution can be left in `running`
+   * forever — and a stuck execution blocks every later one on that trigger from
+   * starting, so the next real pull request never gets reviewed. There is no
+   * way to cancel an execution, so the only fix is not to create it.
+   *
+   * Dispatch re-arms the trigger, so the reviewer is always live for a real run.
+   */
+  let reviewerPaused = false;
+  if (reviewerTrigger) {
+    const err = await setTriggerStatus(reviewerTrigger, 'paused');
+    if (err) warnings.push(err);
+    else reviewerPaused = true;
+  }
 
   const prsClosed = await closeAgentPrs(warnings);
   const branchesDeleted = await deleteAgentBranches(warnings);
-
-  const resumeWarning = await setReviewerTrigger('active');
-  if (resumeWarning) warnings.push(resumeWarning);
-
   const sessionsRemoved = await removeOrphanSessions(warnings);
 
   resetStore();
 
-  return { ok: true, prsClosed, branchesDeleted, sessionsRemoved, warnings };
+  return { ok: true, prsClosed, branchesDeleted, sessionsRemoved, reviewerPaused, warnings };
 }

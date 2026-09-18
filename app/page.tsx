@@ -13,6 +13,7 @@ type ResetSummary = {
   prsClosed?: number;
   branchesDeleted?: number;
   sessionsRemoved?: number;
+  reviewerPaused?: boolean;
   warnings?: string[];
   error?: string;
 };
@@ -166,6 +167,12 @@ export default function Page() {
               Reset complete — {resetResult.prsClosed ?? 0} pull request(s) closed,{' '}
               {resetResult.branchesDeleted ?? 0} branch(es) deleted,{' '}
               {resetResult.sessionsRemoved ?? 0} session(s) removed.
+              {resetResult.reviewerPaused && (
+                <div className="text-sm text-muted pt-1.5">
+                  Reviewer trigger paused so closing these pull requests cannot wake it. It re-arms on
+                  the next dispatch.
+                </div>
+              )}
               {resetResult.warnings?.length ? (
                 <div className="text-sm text-amber pt-1.5">{resetResult.warnings.join(' · ')}</div>
               ) : null}

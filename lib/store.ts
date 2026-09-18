@@ -67,6 +67,14 @@ export function moveTicket(key: string, column: Column): void {
   if (t) t.column = column;
 }
 
+/** Record a pull request against a ticket, however we learned about it. */
+export function setTicketPr(key: string, prUrl: string): void {
+  const t = state().tickets.get(key);
+  if (!t) return;
+  t.prUrl = prUrl;
+  if (t.column === 'in_progress') t.column = 'in_review';
+}
+
 export function addComment(key: string, comment: Comment): void {
   const t = state().tickets.get(key);
   if (!t) return;

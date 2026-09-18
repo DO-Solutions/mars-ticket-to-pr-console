@@ -133,6 +133,7 @@ export type FeedTab = { id: string; label: string; run?: Run };
  */
 export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
   const [selected, setSelected] = useState(tabs[0]?.id);
+  const [userPicked, setUserPicked] = useState(false);
   const [following, setFollowing] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -142,10 +143,12 @@ export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
   const run = current?.run;
   const count = run?.feed.length ?? 0;
 
-  // Follow whichever agent starts working, so nobody has to notice the handover.
+  // Follow whichever agent starts working, so nobody has to notice the
+  // handover — but stop as soon as the viewer picks a tab themselves, or their
+  // click is undone on the next render.
   useEffect(() => {
-    if (active && active.id !== selected) setSelected(active.id);
-  }, [active, selected]);
+    if (!userPicked && active && active.id !== selected) setSelected(active.id);
+  }, [active, selected, userPicked]);
 
   useEffect(() => {
     if (following) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -166,7 +169,10 @@ export function AgentFeed({ tabs }: { tabs: FeedTab[] }) {
           return (
             <button
               key={t.id}
-              onClick={() => setSelected(t.id)}
+              onClick={() => {
+                setSelected(t.id);
+                setUserPicked(true);
+              }}
               className={`flex items-center gap-2 text-sm px-2.5 py-1 rounded transition ${
                 t.id === current?.id
                   ? 'bg-do-blue/20 text-primary font-medium'

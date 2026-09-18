@@ -87,6 +87,31 @@ export async function getPr(number: number): Promise<PrState | null> {
   };
 }
 
+/**
+ * Find the agent's open pull request for a ticket by its branch name.
+ *
+ * The agents post their PR URL back to /api/agent/callback, but that is the
+ * last step of a long run and an agent that stops early — or forgets — leaves
+ * the board with no pull request even though one exists. Looking it up removes
+ * that dependency entirely.
+ */
+export async function findAgentPr(ticketKey: string): Promise<string | null> {
+  try {
+    const r = await fetch(`${GH}/repos/${repo()}/pulls?state=open&per_page=100`, {
+      headers: headers(),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) return null;
+    const prs = (await r.json()) as { html_url: string; head?: { ref?: string } }[];
+    const prefix = `agent/${ticketKey.toUpperCase()}-`;
+    const hit = prs.find((p) => (p.head?.ref ?? '').toUpperCase().startsWith(prefix.toUpperCase()));
+    return hit?.html_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function prNumberFromUrl(url: string): number | null {
   const m = url.match(/\/pull\/(\d+)/);
   return m ? Number(m[1]) : null;

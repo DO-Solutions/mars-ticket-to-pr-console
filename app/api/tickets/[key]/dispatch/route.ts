@@ -72,7 +72,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ key: s
     costMicros: 0,
   });
 
-  void consumeSession(executionId, sessionId);
+  void consumeSession(executionId, sessionId, { triggerId });
   watchReviewer(ticket.key);
 
   moveTicket(ticket.key, 'in_progress');

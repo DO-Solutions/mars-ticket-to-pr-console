@@ -59,7 +59,7 @@ export function watchReviewer(ticket: string, opts: { forMs?: number } = {}): vo
           tokensOut: 0,
           costMicros: 0,
         });
-        void consumeSession(ex.execution_id, ex.session_id);
+        void consumeSession(ex.execution_id, ex.session_id, { triggerId });
       }
     } catch {
       // Transient API failure: try again on the next tick.

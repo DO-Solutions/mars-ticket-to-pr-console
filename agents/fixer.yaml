@@ -65,11 +65,12 @@ skills:
 
           cd /workspace
           if [ -d taskflow/.git ]; then
-            cd taskflow && git fetch origin main && git checkout main \
+            cd taskflow && git fetch origin --prune && git checkout main \
               && git reset --hard origin/main && git clean -fd
-            # Delete branches left by earlier runs. Without this, `git switch -c`
-            # hits a name that already exists and the branch drifts to
-            # `...-v2`, `...-v3` on every subsequent run.
+            # Delete branches left by earlier runs, and prune remote-tracking
+            # refs for branches that no longer exist. Without both, the branch
+            # name drifts to `...-v2`, `...-v3` and upwards on every run,
+            # because the names still look taken.
             git branch --list 'agent/*' | tr -d ' *' | xargs -r -n1 git branch -D
           else
             gh repo clone "$TARGET_REPO" taskflow && cd taskflow
@@ -105,7 +106,10 @@ skills:
       change rather than the test.
 
       ## 6. Commit and push
-      Branch and commit per AGENTS.md:
+      Branch and commit per AGENTS.md. Use exactly `agent/TF-<number>-<slug>`
+      with no numeric suffix — step 1 cleared any older branch of that name, so
+      do not add `-v2` or similar even if git history suggests it was used
+      before:
 
           git switch -c "agent/TF-<number>-<short-slug>"
           git add -A

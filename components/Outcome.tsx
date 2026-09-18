@@ -13,7 +13,30 @@ const AUTHOR_STYLE: Record<string, string> = {
 
 export function Outcome({ ticket }: { ticket?: Ticket }) {
   const [pr, setPr] = useState<PrState | null>(null);
-  const prUrl = ticket?.prUrl;
+  const [discovered, setDiscovered] = useState<string>();
+  const prUrl = ticket?.prUrl ?? discovered;
+
+  // The agent posts its PR URL back when it finishes, but it may stop before
+  // that step. Ask the server to look it up meanwhile.
+  useEffect(() => {
+    if (!ticket || ticket.prUrl) return;
+    let alive = true;
+    const look = async () => {
+      try {
+        const res = await fetch(`/api/tickets/${ticket.key}/pr`, { cache: 'no-store' });
+        const body = await res.json();
+        if (alive && body.prUrl) setDiscovered(body.prUrl);
+      } catch {
+        /* try again on the next tick */
+      }
+    };
+    void look();
+    const iv = setInterval(look, 6000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+  }, [ticket?.key, ticket?.prUrl, ticket]);
 
   useEffect(() => {
     if (!prUrl) {

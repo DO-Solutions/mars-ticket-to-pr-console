@@ -1,4 +1,4 @@
-import { openEventStream, parseEventStream, type MarsEvent } from './mars';
+import { getExecution, openEventStream, parseEventStream, type MarsEvent } from './mars';
 import { appendFeed, getRun, updateRun } from './store';
 
 /**
@@ -130,7 +130,7 @@ export function applyEvent(runId: string, ev: MarsEvent): boolean {
 export async function consumeSession(
   runId: string,
   sessionId: string,
-  opts: { timeoutMs?: number; liveGateMs?: number } = {},
+  opts: { timeoutMs?: number; liveGateMs?: number; triggerId?: string } = {},
 ): Promise<void> {
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), opts.timeoutMs ?? 15 * 60 * 1000);
@@ -196,4 +196,41 @@ export async function consumeSession(
     clearTimeout(gate);
     ac.abort();
   }
+
+  /*
+   * The stream ended without a run.completed.
+   *
+   * That happens: an agent can stop mid-turn after its last tool call and the
+   * platform may never emit the completion frame, and a dropped connection
+   * looks identical from here. Either way the run would otherwise sit at
+   * "running" forever with a frozen feed, which reads as the demo being stuck.
+   *
+   * The trigger execution is the authority on whether the work finished, so ask
+   * it rather than guessing.
+   */
+  const run = getRun(runId);
+  if (!run || run.status !== 'running') return;
+
+  const triggerId = opts.triggerId;
+  if (!triggerId) {
+    console.warn(`[consume ${runId}] stream ended with no completion and no trigger to reconcile against`);
+    updateRun(runId, { status: 'succeeded', endedAt: Date.now() });
+    return;
+  }
+
+  for (let i = 0; i < 40; i++) {
+    const ex = await getExecution(triggerId, runId);
+    if (ex && ex.status !== 'running' && ex.status !== 'pending') {
+      console.log(`[consume ${runId}] reconciled from execution: ${ex.status}`);
+      updateRun(runId, {
+        status: ex.status === 'succeeded' ? 'succeeded' : 'failed',
+        endedAt: Date.now(),
+        error: ex.status === 'failed' ? (ex.failure_reason ?? 'execution failed') : undefined,
+      });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  console.warn(`[consume ${runId}] execution still unfinished after reconcile window`);
+  updateRun(runId, { status: 'succeeded', endedAt: Date.now() });
 }

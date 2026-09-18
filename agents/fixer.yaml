@@ -67,6 +67,10 @@ skills:
           if [ -d taskflow/.git ]; then
             cd taskflow && git fetch origin main && git checkout main \
               && git reset --hard origin/main && git clean -fd
+            # Delete branches left by earlier runs. Without this, `git switch -c`
+            # hits a name that already exists and the branch drifts to
+            # `...-v2`, `...-v3` on every subsequent run.
+            git branch --list 'agent/*' | tr -d ' *' | xargs -r -n1 git branch -D
           else
             gh repo clone "$TARGET_REPO" taskflow && cd taskflow
           fi

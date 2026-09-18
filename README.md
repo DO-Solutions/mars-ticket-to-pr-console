@@ -181,6 +181,21 @@ whose event stream replays from the beginning on every connect. The console
 records the session's latest `seq` before firing and ignores anything at or
 below it. If you drive a reused session by hand, apply the same watermark.
 
+**Branch names drift to `-v2`, `-v3`.** Stale branches from earlier runs were
+left in the warm session's workspace, so `git switch -c` hit a name that already
+existed. Step 1 of the fixer's skill now deletes local `agent/*` branches. Note
+that the skill is written into the sandbox when the session is created, so an
+older session keeps the old playbook — rebuild it (see below) to pick up a
+change.
+
+**Rebuilding the warm session also requires recreating the fixer trigger.**
+Removing the session a reuse trigger is bound to takes the trigger with it. The
+full sequence is: remove the session, create it from the manifest, warm it,
+pause it, create the fixer trigger bound to the new session, then update
+`MARS_FIXER_SESSION_ID`, `MARS_FIXER_TRIGGER_ID` and
+`MARS_FIXER_TRIGGER_SECRET` on the app. The reviewer trigger is unaffected, so
+the GitHub webhook stays valid.
+
 **The review shows as a comment, not a formal approval.** GitHub refuses
 `APPROVED` and `CHANGES_REQUESTED` when the reviewer is the pull request's own
 author, and by default both agents authenticate with the same token. The

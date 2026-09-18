@@ -52,6 +52,10 @@ SECRET_FLAGS=(
 # console could never reliably stream it. A bound session's ID is known up
 # front, so the UI attaches before the webhook fires.
 # ---------------------------------------------------------------------------
+# Removing a session that a reuse trigger is bound to deletes the trigger too,
+# so this script reuses an existing session rather than replacing it. To pick up
+# a manifest change you must remove the session, recreate it, and then recreate
+# the fixer trigger bound to the new one.
 echo "==> creating the warm fixer session"
 if doctl harness-runtime show taskflow-fixer >/dev/null 2>&1; then
   echo "    taskflow-fixer already exists — reusing it"

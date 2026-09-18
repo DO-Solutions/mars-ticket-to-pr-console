@@ -95,28 +95,6 @@ export async function openEventStream(
   });
 }
 
-/**
- * The highest `seq` currently in a session's transcript.
- *
- * A reused session accumulates history, and its event stream replays from the
- * beginning on every connect. Capturing the position before firing a trigger
- * lets a consumer ignore the previous run's events — without this, a new run
- * immediately inherits the last run's feed and its `run.completed`.
- */
-export async function latestSeq(sessionId: string): Promise<number> {
-  try {
-    const res = await openEventStream(sessionId, { replayOnly: true });
-    if (!res.ok) return 0;
-    let max = 0;
-    for await (const ev of parseEventStream(res)) {
-      if (typeof ev.seq === 'number' && ev.seq > max) max = ev.seq;
-    }
-    return max;
-  } catch {
-    return 0;
-  }
-}
-
 export type MarsEvent = {
   event_id?: string;
   session_id?: string;

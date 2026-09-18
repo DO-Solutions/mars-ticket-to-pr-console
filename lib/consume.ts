@@ -130,30 +130,70 @@ export function applyEvent(runId: string, ev: MarsEvent): boolean {
 export async function consumeSession(
   runId: string,
   sessionId: string,
-  opts: { timeoutMs?: number; afterSeq?: number } = {},
+  opts: { timeoutMs?: number; liveGateMs?: number } = {},
 ): Promise<void> {
-  const afterSeq = opts.afterSeq ?? 0;
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), opts.timeoutMs ?? 15 * 60 * 1000);
+
+  /*
+   * A reused session accumulates every run it has served, and the event stream
+   * replays that history on connect — over a thousand frames after a few runs,
+   * with no cursor or seq filter supported by the API. The stream announces
+   * when it has finished replaying, though: a `stream.state` frame carrying
+   * `catching_up`, then one carrying `live`. Gate on that and the history
+   * becomes irrelevant, however large it grows.
+   *
+   * This is deliberately not done inside applyEvent: the offline replay
+   * fixtures have no stream.state frames, and gating there would render them
+   * blank.
+   */
+  let live = false;
+  let skipped = 0;
+  let applied = 0;
+
+  // If the transition never arrives, start applying rather than showing
+  // nothing — a missing frame should degrade to noisy, not silent.
+  const gate = setTimeout(() => {
+    if (!live) {
+      live = true;
+      console.warn(`[consume ${runId}] no live transition after ${(opts.liveGateMs ?? 90_000) / 1000}s; applying anyway`);
+    }
+  }, opts.liveGateMs ?? 90_000);
 
   try {
     const res = await openEventStream(sessionId, { signal: ac.signal });
     if (!res.ok) {
+      console.error(`[consume ${runId}] event stream ${res.status}`);
       updateRun(runId, { status: 'failed', error: `event stream ${res.status}` });
       return;
     }
+    console.log(`[consume ${runId}] attached to ${sessionId}`);
+
     for await (const ev of parseEventStream(res)) {
-      // A reused session replays its whole history on connect; anything at or
-      // below the watermark belongs to an earlier run.
-      if (typeof ev.seq === 'number' && ev.seq <= afterSeq) continue;
-      const finished = applyEvent(runId, ev);
-      if (finished) break;
+      if (!live) {
+        if (ev.type === 'stream.state' && (ev.data as { state?: string })?.state === 'live') {
+          live = true;
+          console.log(`[consume ${runId}] caught up after ${skipped} replayed frames`);
+        } else {
+          skipped++;
+        }
+        continue;
+      }
+      applied++;
+      if (applyEvent(runId, ev)) {
+        console.log(`[consume ${runId}] run completed (${applied} events applied)`);
+        break;
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes('abort')) updateRun(runId, { error: msg });
+    if (!msg.includes('abort')) {
+      console.error(`[consume ${runId}] stream error: ${msg}`);
+      updateRun(runId, { error: msg });
+    }
   } finally {
     clearTimeout(timeout);
+    clearTimeout(gate);
     ac.abort();
   }
 }

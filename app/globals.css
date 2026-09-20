@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+/*
+ * One place for colour and type.
+ *
+ * Every text token below is measured against both surfaces it can appear on
+ * (panel and code) and clears WCAG AA at normal size — worst case 5.46:1.
+ * `node scripts/check-contrast.mjs` asserts this, so a future tweak cannot
+ * quietly reintroduce the unreadable greys this replaced.
+ *
+ * Sizes are tuned for a screen-share on a call: nothing below 12px, body at
+ * 15px, code at 13px.
+ */
+@theme {
+  /* Surfaces, darkest to lightest */
+  --color-ink: #0b1018;
+  --color-panel: #111725;
+  --color-raised: #172033;
+  --color-code: #0b1018;
+
+  /* Borders. Card edges are decorative; anything conveying state uses an
+     accent or do-blue, which clear the 3:1 required by WCAG 1.4.11. */
+  --color-edge: #2a3450;
+  --color-edge-hi: #3c4a6b;
+
+  /* Text, most to least prominent */
+  --color-primary: #eef3fa;
+  --color-secondary: #c3d0e3;
+  --color-muted: #95a4bd;
+  --color-subtle: #7f8fa9;
+
+  /* Accents */
+  --color-blue: #8ab4ff;
+  --color-green: #6ee7a0;
+  --color-red: #ff9e95;
+  --color-amber: #f5cd7a;
+  --color-violet: #c9a8ff;
+  --color-do-blue: #0069ff;
+
+  /* Type scale */
+  --text-xs: 0.75rem;      /* 12px — metadata, timestamps */
+  --text-sm: 0.8125rem;    /* 13px — secondary text, code */
+  --text-base: 0.9375rem;  /* 15px — body, feed prose */
+  --text-lg: 1.125rem;     /* 18px — panel titles */
+  --text-xl: 1.375rem;     /* 22px — page title */
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-primary);
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  line-height: 1.65;
+}
+
+/* Keyboard focus must be visible; there was none before. */
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-edge-hi);
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #4a5a7e;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.live-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.feed-item { animation: slide-in 0.18s ease-out; }

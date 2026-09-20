@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 764" width="1120" height="764"
+     font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <rect width="1120" height="764" fill="#ffffff"/>
+
+  <!-- ── title ─────────────────────────────────────────────── -->
+  <text x="40" y="44" font-size="20" font-weight="700" fill="#0b1018">TaskFlow Ops — ticket to reviewed pull request</text>
+  <text x="40" y="68" font-size="13.5" fill="#5b6675">Two agents on DigitalOcean Managed Agents. One fresh sandbox per run, destroyed afterwards.</text>
+
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0,0.5 L10,5 L0,9.5 z" fill="#6b7686"/>
+    </marker>
+  </defs>
+
+  <!-- ── console (column A: x 40–360) ──────────────────────── -->
+  <rect x="40" y="110" width="320" height="188" rx="12" fill="#f1f6fe" stroke="#0069ff" stroke-width="1.6"/>
+  <text x="64" y="140" font-size="14.5" font-weight="700" fill="#0057d6">Console</text>
+  <text x="64" y="160" font-size="12" fill="#6b7686">DigitalOcean App Platform</text>
+  <line x1="64" y1="174" x2="336" y2="174" stroke="#c6dbfb" stroke-width="1"/>
+  <text x="64" y="197" font-size="12.5" fill="#2b3648">Board — simulated Jira</text>
+  <text x="64" y="220" font-size="12.5" fill="#2b3648">Live agent feed</text>
+  <text x="64" y="243" font-size="12.5" fill="#2b3648">Outcome — PR and verdict</text>
+  <text x="64" y="266" font-size="12.5" fill="#2b3648">Agents and guardrails</text>
+
+  <!-- ── fixer trigger (column B: x 460–780) ───────────────── -->
+  <rect x="460" y="110" width="320" height="104" rx="12" fill="#fdf8ed" stroke="#c08a1e" stroke-width="1.6"/>
+  <text x="484" y="140" font-size="14.5" font-weight="700" fill="#8a6400">Trigger — taskflow-fixer</text>
+  <text x="484" y="163" font-size="12.5" fill="#2b3648">webhook · fresh session</text>
+  <text x="484" y="186" font-size="12.5" fill="#2b3648">signed, custom HMAC</text>
+
+  <!-- ── fixer sandbox ─────────────────────────────────────── -->
+  <rect x="460" y="258" width="320" height="196" rx="12" fill="#f3f9f5" stroke="#2f8b57" stroke-width="1.6"/>
+  <text x="484" y="288" font-size="14.5" font-weight="700" fill="#1f6b41">Fixer sandbox</text>
+  <text x="484" y="308" font-size="12" fill="#6b7686">OpenCode · deepseek-v4-pro</text>
+  <line x1="484" y1="322" x2="756" y2="322" stroke="#cbe6d6" stroke-width="1"/>
+  <text x="484" y="345" font-size="12.5" fill="#2b3648">1 — clone and npm ci</text>
+  <text x="484" y="368" font-size="12.5" fill="#2b3648">2 — reproduce the failing test</text>
+  <text x="484" y="391" font-size="12.5" fill="#2b3648">3 — fix, then run the suite</text>
+  <text x="484" y="414" font-size="12.5" fill="#2b3648">4 — push branch, open the PR</text>
+  <text x="484" y="438" font-size="11.5" fill="#b3261e">denied — rm -rf, force-push, merge</text>
+
+  <!-- ── github (column C: x 860–1080) ─────────────────────── -->
+  <rect x="860" y="258" width="220" height="196" rx="12" fill="#f6f7f8" stroke="#57606a" stroke-width="1.6"/>
+  <text x="884" y="288" font-size="14.5" font-weight="700" fill="#24292f">GitHub</text>
+  <text x="884" y="308" font-size="12" fill="#6b7686">taskflow repo</text>
+  <line x1="884" y1="322" x2="1056" y2="322" stroke="#dcdfe3" stroke-width="1"/>
+  <text x="884" y="345" font-size="12.5" fill="#2b3648">agent branch</text>
+  <text x="884" y="368" font-size="12.5" fill="#2b3648">pull request</text>
+  <text x="884" y="391" font-size="12.5" fill="#2b3648">Actions CI</text>
+  <text x="884" y="414" font-size="12.5" fill="#2b3648">review comment</text>
+  <text x="884" y="438" font-size="11.5" fill="#6b7686">AGENTS.md is the standard</text>
+
+  <!-- ── reviewer trigger ──────────────────────────────────── -->
+  <rect x="460" y="512" width="320" height="82" rx="12" fill="#fdf8ed" stroke="#c08a1e" stroke-width="1.6"/>
+  <text x="484" y="542" font-size="14.5" font-weight="700" fill="#8a6400">Trigger — taskflow-reviewer</text>
+  <text x="484" y="565" font-size="12.5" fill="#2b3648">webhook · fresh · github HMAC</text>
+
+  <!-- ── reviewer sandbox ──────────────────────────────────── -->
+  <rect x="460" y="620" width="320" height="76" rx="12" fill="#f8f5fd" stroke="#7b4bc4" stroke-width="1.6"/>
+  <text x="484" y="648" font-size="14.5" font-weight="700" fill="#5b2fa3">Reviewer sandbox</text>
+  <text x="484" y="670" font-size="12" fill="#6b7686">clean room — checks out and tests it itself</text>
+  <text x="484" y="688" font-size="11.5" fill="#b3261e">cannot push, commit or merge</text>
+
+  <!-- ── flow arrows ───────────────────────────────────────── -->
+  <g stroke="#6b7686" stroke-width="1.7" fill="none" marker-end="url(#arw)">
+    <path d="M360,162 L452,162"/>
+    <path d="M620,214 L620,250"/>
+    <path d="M780,356 L852,356"/>
+    <path d="M970,454 L970,486 L806,486 L806,504"/>
+    <path d="M620,594 L620,612"/>
+    <path d="M700,696 L700,726 L1012,726 L1012,462"/>
+  </g>
+
+  <!-- arrow labels, each sitting in a gutter clear of every box -->
+  <text x="406" y="152" font-size="11.5" fill="#3d4757" text-anchor="middle">1</text>
+  <text x="406" y="182" font-size="10.5" fill="#6b7686" text-anchor="middle">dispatch</text>
+  <text x="816" y="346" font-size="11.5" fill="#3d4757" text-anchor="middle">2</text>
+  <text x="816" y="376" font-size="10.5" fill="#6b7686" text-anchor="middle">opens PR</text>
+  <text x="888" y="476" font-size="11.5" fill="#3d4757" text-anchor="middle">3 — pull_request webhook</text>
+  <text x="856" y="718" font-size="11.5" fill="#3d4757" text-anchor="middle">4 — posts the review</text>
+
+  <!-- ── console reads back (dashed) ───────────────────────── -->
+  <g stroke="#9aa4b2" stroke-width="1.5" fill="none" stroke-dasharray="6,5">
+    <path d="M460,346 L150,346"/>
+    <path d="M460,654 L150,654 L150,346"/>
+    <path d="M150,346 L150,306" marker-end="url(#arw)"/>
+  </g>
+  <text x="176" y="420" font-size="11.5" fill="#6b7686">session events (SSE),</text>
+  <text x="176" y="438" font-size="11.5" fill="#6b7686">token counts and callbacks</text>
+
+  <text x="40" y="750" font-size="11.5" fill="#6b7686">Only the board is simulated. Sandboxes, repository, tests, pull requests and reviews are real.</text>
+</svg>

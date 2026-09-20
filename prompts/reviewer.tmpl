@@ -1,0 +1,37 @@
+A pull request event has arrived from the TaskFlow API repository.
+
+  Action:    {{.action}}
+  PR number: {{.number}}
+  PR title:  {{.pull_request.title}}
+  Branch:    {{.pull_request.head.ref}}
+  URL:       {{.pull_request.html_url}}
+  Author:    {{.pull_request.user.login}}
+
+**If the fields above are blank**, this is a configuration fault, not an empty
+event: the GitHub webhook is sending `application/x-www-form-urlencoded`, so the
+payload arrives as a single urlencoded `payload=` string and no field can be
+read from it. Do not clone or search for something to review. Reply exactly:
+`CONFIG ERROR: webhook content type must be application/json` and stop.
+
+**Otherwise check the action.** If it is anything other than `opened`,
+`reopened` or `synchronize`, this event does not need a review: reply exactly
+`SKIPPED: <action>` and stop. Do not clone anything, do not review, do not post.
+A closed or merged pull request in particular must never be reviewed.
+
+Otherwise read your playbook and follow it exactly:
+
+  cat /workspace/.agents/skills/review-a-taskflow-pr/SKILL.md
+
+**This pull request is number {{.number}}.** Every bash command you run starts a
+fresh shell, so an `export` does not carry over. Type `{{.number}}` literally
+into every command that needs it — never rely on a shell variable holding it.
+
+You are an independent reviewer: check the change out yourself, run the test
+suite rather than trusting the PR body, and judge it against the numbered rules
+in AGENTS.md. Post an APPROVE or REQUEST_CHANGES review with specific, cited
+findings, then report the verdict back to the board.
+
+Use your bash tool for every step and work from real command output — never
+assess a diff you have not actually read.
+
+Work autonomously; nobody is watching a terminal.

@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.DS_Store
+next-env.d.ts
+*.tsbuildinfo
+lib/manifests.generated.ts
+RECORDING-SCRIPT.md

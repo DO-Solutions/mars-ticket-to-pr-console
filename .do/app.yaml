@@ -1,0 +1,74 @@
+# App Platform spec for the MARS ticket-to-PR console.
+#
+# Deploy with:
+#   doctl apps create --spec .do/app.yaml
+# and then set the secret values in the console (they are marked SECRET here so
+# they are never committed):
+#   Settings > mars-ticket-to-pr-console > Environment Variables
+#
+# NYC is deliberate: MARS sandboxes and their Insights metrics are NYC3-only
+# today, so keeping the app in the same region keeps latency and metrics together.
+name: mars-ticket-to-pr-console
+region: nyc
+
+services:
+  - name: console
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    http_port: 8080
+
+    # A public clone URL needs no GitHub app installation on the org, which
+    # DO-Solutions restricts to owners. Trade-off: no deploy-on-push — use
+    # `doctl apps create-deployment <app-id>` after pushing, or scripts/deploy.sh.
+    git:
+      repo_clone_url: https://github.com/DO-Solutions/mars-ticket-to-pr-console.git
+      branch: main
+
+    build_command: npm run build
+    run_command: npm start
+
+    envs:
+      - key: PORT
+        scope: RUN_TIME
+        value: '8080'
+      - key: TARGET_REPO
+        scope: RUN_AND_BUILD_TIME
+        value: DO-Solutions/mars-ticket-to-pr-taskflow
+
+      # A DO personal access token — reads sessions, events and trigger executions.
+      - key: DO_API_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+
+      # Read-only fine-grained PAT, used to render PR and review state.
+      - key: GITHUB_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+
+      # Shared secret the agents present when posting back to /api/agent/callback.
+      - key: AGENT_CALLBACK_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+
+      # From scripts/setup-mars.sh output.
+      - key: MARS_FIXER_SESSION_ID
+        scope: RUN_TIME
+        value: REPLACE_ME
+      - key: MARS_FIXER_TRIGGER_ID
+        scope: RUN_TIME
+        value: REPLACE_ME
+      - key: MARS_FIXER_TRIGGER_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME
+      - key: MARS_REVIEWER_TRIGGER_ID
+        scope: RUN_TIME
+        value: REPLACE_ME
+
+    health_check:
+      http_path: /api/tickets
+      initial_delay_seconds: 20
+      period_seconds: 15

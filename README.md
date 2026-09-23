@@ -64,7 +64,7 @@ trade-off is a clone and `npm ci` per run, about twenty seconds.
 | `docs/` | architecture diagram and troubleshooting notes |
 
 The target repository the agents work on is
-[`mars-ticket-to-pr-taskflow`](https://github.com/dcabrejas/mars-ticket-to-pr-taskflow),
+[`mars-ticket-to-pr-taskflow`](https://github.com/DO-Solutions/mars-ticket-to-pr-taskflow),
 which carries four seeded issues and the `AGENTS.md` conventions the reviewer
 judges against.
 

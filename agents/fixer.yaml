@@ -114,8 +114,12 @@ skills:
       because it looks correct. If the push is rejected, say which command
       failed and what it returned, then stop.
 
-      Branch and commit per AGENTS.md. Use exactly `agent/TF-<number>-<slug>`
-      with no numeric suffix:
+      Branch and commit per AGENTS.md, using `agent/TF-<number>-<slug>`.
+
+      If that branch already exists on the remote, the previous run was not
+      cleaned up. **Do not delete the remote branch** to free the name, and do
+      not invent a suffix — say so and stop, so the cleanup gets fixed instead
+      of silently destroying someone else's work.
 
           git switch -c "agent/TF-<number>-<short-slug>"
           git add -A
@@ -125,6 +129,11 @@ skills:
       Never force-push, never push to main, never merge the PR yourself.
 
       ## 7. Open the pull request
+
+      **Run the command — do not print it.** Writing a fenced code block
+      containing `gh pr create` is not opening a pull request, and a run that
+      ends that way has failed however complete the summary looks.
+
       Title must start with the ticket key. The body must have **Root cause**,
       **Fix**, and **Verification** sections, per AGENTS.md:
 

@@ -10,15 +10,16 @@ so a still feed is normal. The console shows an elapsed timer and, after twelve
 quiet seconds, says the model is working. Runs measured on TF-101: 85s, 127s and
 333s. Only treat it as broken if the feed is empty from the very start.
 
-**Every run fails with `403 Forbidden` from
-`inference-trusted.vpc-endpoint.internal.digitalocean.com`.** Sandbox inference
-rejected `doo_v1_` model access keys as of 2026-09-20, including freshly issued
-ones, while the same key worked against the public `inference.do-ai.run`
-endpoint. The workaround is a DigitalOcean PAT with **full access** — per
-`doctl serverless-inference --help`, "all scopes must be granted for the
-serverless inference API to work", so a narrowly scoped token cannot work.
-See `INFERENCE-403-REPORT.md` (kept outside the repo) for the full evidence.
-Revoke the PAT when the key path is fixed.
+**A run fails with `403 Forbidden` from the internal inference endpoint.** The
+`HARNESS_INFERENCE_API_KEY` is not valid for sandbox inference. Create a fresh
+model access key in the control panel with the console switched to the right
+team, and re-inject it into both triggers with `--secret`. Two keys issued
+during this build failed this way while a later one worked, so if a key misbehaves,
+replace it before investigating further.
+
+**A run fails with `404 https://api.githubcopilot.com/…`.** No inference key
+reached the sandbox. Omitting it does not fall back to DigitalOcean inference —
+OpenCode falls back to its own default provider. The key is mandatory.
 
 **The reviewer runs but posts nothing, and its prompt fields are blank.** The
 GitHub webhook is using GitHub's default content type. Set it to

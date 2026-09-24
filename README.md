@@ -8,8 +8,8 @@ back to the board, and a human still owns the merge.
 | | |
 |---|---|
 | **Owner** | @dcabrejas |
-| **Status** | Working — with one workaround, see [Known issues](#known-issues) |
-| **Last validated** | 2026-09-20 |
+| **Status** | Working |
+| **Last validated** | 2026-09-24 |
 | **Live demo** | https://mars-ticket-to-pr-console-6ms2v.ondigitalocean.app |
 | **Recording** | [mars-ticket-to-pr-demo.mp4](https://demo-recordings.tor1.cdn.digitaloceanspaces.com/mars-ticket-to-pr-demo.mp4) |
 | **Products shown** | Managed Agents (MARS), Gradient serverless inference, App Platform |
@@ -121,12 +121,6 @@ button replays a captured real run through the same view, with no sandbox
 involved.
 
 ## Known issues
-
-**Inference needs a full-access PAT.** As of 2026-09-20, sandbox inference
-rejects `doo_v1_` model access keys, including newly issued ones, while the same
-key works against the public endpoint. Until that is resolved the agents use a
-DigitalOcean PAT with all scopes. Treat it as disposable and revoke it when the
-key path is fixed.
 
 **The review posts as a comment, not a formal approval.** Both agents share one
 GitHub identity, and GitHub will not let an author formally review their own pull

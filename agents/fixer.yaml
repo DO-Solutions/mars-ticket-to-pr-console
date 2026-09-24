@@ -28,6 +28,9 @@ env:
   CONSOLE_URL: "${CONSOLE_URL}"
 
 secrets:
+  # Mandatory. Without it OpenCode falls back to its own default provider
+  # (api.githubcopilot.com) and the run fails — it does not reach DigitalOcean
+  # inference at all.
   HARNESS_INFERENCE_API_KEY: "placeholder-injected-at-create-time"
   GITHUB_TOKEN: "placeholder-injected-at-create-time"
   CONSOLE_TOKEN: "placeholder-injected-at-create-time"
@@ -102,6 +105,15 @@ skills:
       change rather than the test.
 
       ## 6. Commit and push
+
+      Everything must go to `$TARGET_REPO` and nowhere else. If a push or a
+      pull request fails, **stop and report the failure** — do not rewrite the
+      remote to point at a different repository, do not push to a fork, and do
+      not open the pull request against another repo. A run that succeeds
+      against the wrong repository is worse than one that fails honestly,
+      because it looks correct. If the push is rejected, say which command
+      failed and what it returned, then stop.
+
       Branch and commit per AGENTS.md. Use exactly `agent/TF-<number>-<slug>`
       with no numeric suffix:
 

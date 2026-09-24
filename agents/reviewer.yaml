@@ -19,6 +19,9 @@ env:
   CONSOLE_URL: "${CONSOLE_URL}"
 
 secrets:
+  # Mandatory. Without it OpenCode falls back to its own default provider
+  # (api.githubcopilot.com) and the run fails — it does not reach DigitalOcean
+  # inference at all.
   HARNESS_INFERENCE_API_KEY: "placeholder-injected-at-create-time"
   GITHUB_TOKEN: "placeholder-injected-at-create-time"
   CONSOLE_TOKEN: "placeholder-injected-at-create-time"

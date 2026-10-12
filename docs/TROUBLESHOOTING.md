@@ -48,10 +48,24 @@ calls the `github_create_pr_review` action, and `gh pr review` is blocked by a
 deny rule so the gateway is the only route a verdict can take. The gateway runs
 as the GitHub account bound to the team's `github` connection — a dedicated bot,
 not the identity that opened the pull request — which is what makes a formal
-`APPROVE` or `REQUEST_CHANGES` possible. Nothing needs the bot to be an
-organization member while the repositories are public: GitHub grants read
-access, and read access is all a reviewer needs. When the repositories become
-internal, add the bot as a collaborator or the call starts returning 403.
+`APPROVE` or `REQUEST_CHANGES` possible.
+
+The bot needs no organization membership to *post* while the repositories are
+public — GitHub grants everyone read access, and read is enough to submit a
+review. It is not enough for that review to count. GitHub's permission table
+gates "approve or request changes to a pull request with required reviews"
+behind **write** access, so the approval is recorded in the timeline but
+`reviewDecision` stays `null` and merging is not gated. Verify with the REST
+reviews endpoint *and* the GraphQL `reviewDecision` field — the first will say
+`APPROVED` while the second says `null`, and only the second reflects what the
+pull request page shows.
+
+To make the approval count, an organization owner must add the bot as a
+collaborator with **write** access (`DO-Solutions` restricts outside-collaborator
+invitations to owners, so a repository admin cannot do it). Adding a branch
+protection rule requiring one approving review then makes the merge box show the
+requirement satisfied by the agent. When the repositories become internal, the
+bot needs collaborator access regardless, or the call starts returning 403.
 
 **A review call returns `unauthorized` / `requires_authorization`.** The team's
 GitHub connection has lapsed or was never made. The error carries its own fix:

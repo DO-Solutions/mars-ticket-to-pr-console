@@ -126,9 +126,17 @@ involved.
 `github_create_pr_review` action rather than the `gh` CLI, which is blocked by a
 deny rule — so every verdict takes one governed, audited path. The gateway acts
 as a dedicated bot account, separate from the identity that opens the pull
-request, so reviews land as real `APPROVED` / `CHANGES_REQUESTED` states rather
-than comments. Setup is one browser authorization; see
-[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+request, so reviews land as real `APPROVED` / `CHANGES_REQUESTED` review states
+rather than the plain comments a self-review is limited to.
+
+**But the approval does not gate merging.** The bot has only read access, which
+is what a public repository grants everyone, and GitHub requires *write* access
+for a review to affect mergeability — so `reviewDecision` stays `null` and the
+merge box shows no approval. The review is real and visible in the timeline; it
+simply carries no enforcement. Closing that gap needs an organization owner to
+add the bot as a collaborator with write access, which is a deliberate
+not-yet rather than a bug. Until then the first line of the review body carries
+the verdict, which is what the console reads for its badge.
 
 Everything else: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 

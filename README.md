@@ -122,10 +122,13 @@ involved.
 
 ## Known issues
 
-**The review posts as a comment, not a formal approval.** Both agents share one
-GitHub identity, and GitHub will not let an author formally review their own pull
-request. The verdict leads the comment body and the console renders it. Giving
-the reviewer its own account restores real review states.
+**The reviewer posts through Action Gateway.** It calls the
+`github_create_pr_review` action rather than the `gh` CLI, which is blocked by a
+deny rule — so every verdict takes one governed, audited path. The gateway acts
+as a dedicated bot account, separate from the identity that opens the pull
+request, so reviews land as real `APPROVED` / `CHANGES_REQUESTED` states rather
+than comments. Setup is one browser authorization; see
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 Everything else: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 

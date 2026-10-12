@@ -43,15 +43,30 @@ secret into the repository. To avoid it, do not let a trigger fire for events
 you do not intend to act on — which is why `reset-demo.sh` leaves the reviewer
 paused and dispatch re-arms it.
 
-**The review is a comment, not a formal approval.** Deliberate. GitHub refuses
-`APPROVED` and `CHANGES_REQUESTED` when the reviewer is the pull request's own
-author, and both agents share one GitHub identity here. The reviewer posts with
-`gh pr review --comment` and leads with `## APPROVED` or `## CHANGES REQUESTED`,
-which the console reads for its badge. Do not instruct the agent to try
-`--approve` first: that call can never succeed, and whether anything gets posted
-then depends on the agent improvising a fallback — which sometimes left pull
-requests with no review at all. Giving the reviewer its own GitHub account
-restores genuine review states.
+**The review posts through Action Gateway, not the `gh` CLI.** The reviewer
+calls the `github_create_pr_review` action, and `gh pr review` is blocked by a
+deny rule so the gateway is the only route a verdict can take. The gateway runs
+as the GitHub account bound to the team's `github` connection — a dedicated bot,
+not the identity that opened the pull request — which is what makes a formal
+`APPROVE` or `REQUEST_CHANGES` possible. Nothing needs the bot to be an
+organization member while the repositories are public: GitHub grants read
+access, and read access is all a reviewer needs. When the repositories become
+internal, add the bot as a collaborator or the call starts returning 403.
+
+**A review call returns `unauthorized` / `requires_authorization`.** The team's
+GitHub connection has lapsed or was never made. The error carries its own fix:
+a `connect_url` and a verification code. Open it in a **private window** signed
+in as the bot — the OAuth flow silently binds whichever account the browser is
+already logged into, so doing this in your normal session binds you instead,
+and the formal approval stops working with no obvious cause. Verify afterwards
+with `GET /v2/action-gateway/connections`, or by asking a session to invoke
+`github_github_get_user`, which returns the bound login.
+
+**`ask` is not enforced on Action Gateway tools; `deny` is.** Measured on both
+opencode and claude-code: a rule of `action: ask` on a gateway tool did not
+prompt and did not stop the call. A `deny` rule does work, and works by removing
+the tool from the catalog the agent can discover — it reports the action does
+not exist. Treat `deny` as the control and `ask` as decoration.
 
 ## Things that bite when extending this
 

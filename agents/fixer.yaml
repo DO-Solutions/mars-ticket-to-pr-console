@@ -18,8 +18,7 @@
 #     --secret CONSOLE_TOKEN=@~/.secrets/console-callback
 name: taskflow-fixer
 agent: opencode
-size: mv-2vcpu-4gb
-persistent_workspace: false
+size: mars-2vcpu-4gb
 
 env:
   HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"

@@ -7,10 +7,24 @@
 #
 # Because a fresh session is destroyed when its run ends, the demo app persists
 # this agent's events server-side as they stream.
+#
+# The verdict is posted through Action Gateway (`github_create_pr_review`), not
+# through the `gh` CLI. Two reasons. The gateway call runs as the GitHub account
+# bound to the team's Action Gateway connection — a dedicated bot, separate from
+# the identity that opened the pull request — so GitHub accepts a *formal*
+# APPROVE or REQUEST_CHANGES rather than the plain comment a self-review is
+# limited to. And the write is a governed, audited tool call instead of a shell
+# command, which is the point of the product.
 name: taskflow-reviewer
 agent: opencode
-size: mv-2vcpu-4gb
-persistent_workspace: false
+size: mars-2vcpu-4gb
+
+# The single Action Gateway action this agent may use. Attaching exactly one
+# keeps the blast radius visible: it can post a review and do nothing else
+# through the gateway. Requires an active `github` connection for the team's
+# actor — see docs/TROUBLESHOOTING.md if the call returns `requires_authorization`.
+tools:
+  - do.actions: [github_create_pr_review]
 
 env:
   HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
@@ -37,6 +51,10 @@ permissions:
     - { tool: bash, match: { command: "gh pr close*" },    action: deny }
     - { tool: bash, match: { command: "gh pr edit*" },     action: deny }
     - { tool: bash, match: { command: "git commit*" },     action: deny }
+    # The verdict goes through Action Gateway, so the CLI route is closed. This
+    # is not redundancy: it makes the gateway the *only* way a review can be
+    # posted, which is what makes the audit trail complete.
+    - { tool: bash, match: { command: "gh pr review*" },   action: deny }
 
 egress:
   allow_hosts:
@@ -52,7 +70,7 @@ skills:
     description: Use when reviewing a pull request on the TaskFlow API repo and deciding whether to approve it.
     license: Apache-2.0
     metadata: { author: DO-Solutions }
-    allowed_tools: [bash, file.read]
+    allowed_tools: [bash, file.read, do.actions]
     instructions: |
       # Reviewing a TaskFlow pull request
 
@@ -107,10 +125,25 @@ skills:
 
       ## 5. Post the verdict
 
-      Post it with `--comment`, and start the body with the verdict on its own
-      line:
+      Post it with the **`github_create_pr_review` action**, through Action
+      Gateway. Do NOT use `gh pr review` — that command is blocked by a deny
+      rule, and a blocked command is not a posted review.
 
-          cat > /tmp/verdict.md <<'MD'
+      Unlike the `gh` CLI, this action runs as a dedicated review bot account,
+      not as the author of the pull request. So a real verdict is accepted:
+      use `APPROVE` or `REQUEST_CHANGES`, not `COMMENT`.
+
+      Call it with exactly these arguments:
+
+      - `owner` — the part of `$TARGET_REPO` before the `/`
+      - `repo` — the part after the `/`
+      - `pull_number` — the pull request number from your prompt
+      - `event` — `APPROVE` if every applicable rule is satisfied and the tests
+        pass, otherwise `REQUEST_CHANGES`
+      - `body` — the markdown below
+
+      Make exactly one such call. Compose the body as:
+
           ## APPROVED
           <or: ## CHANGES REQUESTED>
 
@@ -122,15 +155,16 @@ skills:
 
           *Automated review by the MARS reviewer agent. The merge decision stays
           with a human.*
-          MD
 
-          gh pr review <PR number> --comment --body-file /tmp/verdict.md
+      Keep the verdict heading on the first line even though `event` already
+      carries it — the demo board reads that line, and it keeps the review
+      readable on its own.
 
-      Use `--comment`, not `--approve` or `--request-changes`. Both agents share
-      one GitHub identity in this demo, and GitHub refuses a formal review from
-      the pull request's own author. The verdict on the first line is what the
-      board reads, so it carries the same weight — this is by design, not a
-      failure, and should not be described as one.
+      Check what the action returns. A `status` of `succeeded` means the review
+      is live. If it comes back `unauthorized` with `requires_authorization`,
+      the team's GitHub connection has lapsed: stop, and say so plainly in your
+      final message rather than falling back to another method. Do not attempt
+      to post the verdict any other way.
 
       Approve only if every applicable rule is satisfied and the tests pass. Be
       specific and do not pad it with praise.

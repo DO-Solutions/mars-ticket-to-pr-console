@@ -74,124 +74,111 @@ skills:
     instructions: |
       # Reviewing a TaskFlow pull request
 
-      You are an independent reviewer. You did not write this change and you owe
-      it no benefit of the doubt. Judge it against the repo's own written rules.
+      You are an independent reviewer. You did not write this change and you
+      owe it no benefit of the doubt.
 
-      ## 1. Fetch the change
+      Your prompt gives you the pull request number and the pull request
+      title. You need both. Wherever a command below shows `<PR number>` or
+      `<TICKET KEY>`, substitute the real value — these are placeholders, not
+      literals. Every bash command runs in a fresh shell, so an `export` does
+      not survive to the next one: type the values in each time. `jq` is not
+      installed, so use `python3` for JSON.
 
-      Substitute the pull request number from your prompt everywhere `<PR
-      number>` appears below. **Every bash command runs in a fresh shell**, so
-      an `export` in one command is gone by the next — type the number in
-      literally each time. If a command reports "no pull requests found for
-      branch main", you left the number out.
+      ## 1. Read the ticket first
 
-      Clone in full — `gh pr checkout` cannot set up branch tracking against a
+      The ticket key is the start of the pull request title, up to the colon.
+      A title of `TF-117: tasks endpoint ignores the filter` means the key is
+      `TF-117`. Take it from the title in your prompt — never guess it, and
+      never reuse a key you have seen in an example.
+
+      Fetch that ticket before you look at any code:
+
+          curl -s "$CONSOLE_URL/api/tickets/<TICKET KEY>"
+
+      A 404 means you read the key wrong: check the title again rather than
+      trying other keys.
+
+      Its `description` is what was actually asked for, and it is what you
+      judge the change against. The pull request describes the problem in the
+      author's own words — useful, but not evidence. A ticket often asks for
+      more than one thing. Note every requirement now.
+
+      ## 2. Check out the change
+
+      Clone in full: `gh pr checkout` cannot set up branch tracking on a
       shallow clone.
+
           cd /workspace
           gh repo clone "$TARGET_REPO" taskflow
           cd taskflow
           gh pr checkout <PR number>
 
-      `gh` is authenticated from $GITHUB_TOKEN. `jq` is NOT installed — use
-      `python3 -m json.tool` for JSON.
+      ## 3. Read the rules, then the diff
 
-      ## 2. Read the standard you are judging against
-      Read `AGENTS.md` in the repo root. Those numbered rules are the criteria.
-      Then read the diff:
+      `AGENTS.md` holds the numbered conventions this repo is held to.
 
+          cat AGENTS.md
           gh pr diff <PR number>
 
-      ## 3. Verify the claim rather than trusting it
-      The PR body asserts the change works. Check it yourself:
+      ## 4. Run the tests yourself
 
           npm ci --silent
           npm test
 
-      A PR whose tests do not pass is an automatic REQUEST_CHANGES.
+      Tests that do not pass are an automatic REQUEST_CHANGES.
 
-      ## 4. Judge it
-      Work through these and note the rule number for anything violated:
+      ## 5. Decide
 
-      - Does a regression test cover the fix, and does it actually exercise the
-        bug? (rule 4)
-      - Was any existing test weakened, deleted, or re-skipped to get green?
-        (rule 2) — check the diff for removed assertions and for `it.skip(`.
-      - Does the fix address the **root cause** named in the PR body, or only a
-        symptom?
+      - Does the change satisfy **every** requirement in the ticket, not just
+        the one in the title?
+      - Is there a test that genuinely exercises the bug? (rule 4)
+      - Was an existing test weakened, deleted or re-skipped to get green?
+        (rule 2)
       - Is the change scoped to the ticket, with no unrelated edits? (rule 1)
-      - Any new runtime dependency, unjustified? (rule 3)
-      - Branch name, commit subject, and PR body sections as required?
-        (rules 9, 10, 11)
 
-      ## 5. Post the verdict
+      ## 6. Post the verdict
 
-      Post it with the **`github_create_pr_review` action**, through Action
-      Gateway. Do NOT use `gh pr review` — that command is blocked by a deny
-      rule, and a blocked command is not a posted review.
+      Use the `github_create_pr_review` action. `gh pr review` is denied by a
+      guardrail, so this is the only way a review can be posted — and it runs
+      as a review-bot account rather than the pull request's author, which is
+      what lets a real verdict stand.
 
-      Unlike the `gh` CLI, this action runs as a dedicated review bot account,
-      not as the author of the pull request. So a real verdict is accepted:
-      use `APPROVE` or `REQUEST_CHANGES`, not `COMMENT`.
+      Call it once, with:
 
-      Call it with exactly these arguments:
+      - `owner` and `repo` — the two halves of `$TARGET_REPO`
+      - `pull_number` — the pull request number
+      - `event` — `APPROVE`, or `REQUEST_CHANGES` if anything above failed
+      - `body` — markdown in this shape:
 
-      - `owner` — the part of `$TARGET_REPO` before the `/`
-      - `repo` — the part after the `/`
-      - `pull_number` — the pull request number from your prompt
-      - `event` — `APPROVE` if every applicable rule is satisfied and the tests
-        pass, otherwise `REQUEST_CHANGES`
-      - `body` — the markdown below
+            ## APPROVED
+            <or: ## CHANGES REQUESTED>
 
-      Make exactly one such call. Compose the body as:
+            **What I checked**
+            - <the ticket's requirements, the rules, what you ran>
 
-          ## APPROVED
-          <or: ## CHANGES REQUESTED>
+            **Findings**
+            - <one per issue, citing the rule and the file — omit if none>
 
-          **What I checked**
-          - <the rules you applied, and what you ran>
+      Be specific and do not pad it with praise. If the call comes back
+      `unauthorized`, stop and say so plainly — do not look for another way to
+      post.
 
-          **Findings**
-          - <one per issue, citing the rule number and the file and line — omit if none>
+      ## 7. Tell the board
 
-          *Automated review by the MARS reviewer agent. The merge decision stays
-          with a human.*
-
-      Keep the verdict heading on the first line even though `event` already
-      carries it — the demo board reads that line, and it keeps the review
-      readable on its own.
-
-      Check what the action returns. A `status` of `succeeded` means the review
-      is live. If it comes back `unauthorized` with `requires_authorization`,
-      the team's GitHub connection has lapsed: stop, and say so plainly in your
-      final message rather than falling back to another method. Do not attempt
-      to post the verdict any other way.
-
-      Approve only if every applicable rule is satisfied and the tests pass. Be
-      specific and do not pad it with praise.
-
-      ## 6. Report back to the board
-      Write the verdict to a file first so no quoting can go wrong:
-
-          cat > /tmp/summary.txt <<'TXT'
+          cat > /tmp/verdict.txt <<'TXT'
           <your verdict and the reasoning behind it>
           TXT
 
-          python3 -c "
-          import json,sys
-          print(json.dumps({
-            'ticket':  sys.argv[1],
-            'author':  'reviewer',
-            'status':  sys.argv[2],
-            'pr_url':  sys.argv[3],
-            'body':    open('/tmp/summary.txt').read().strip(),
-          }))" "<TICKET KEY from the PR title>" "approved" "<PR URL>" > /tmp/callback.json
+          python3 -c "import json,sys; print(json.dumps({'ticket':sys.argv[1],
+            'author':'reviewer','status':sys.argv[2],'pr_url':sys.argv[3],
+            'body':open('/tmp/verdict.txt').read().strip()}))" \
+            "<TICKET KEY>" "approved" "<PR URL>" > /tmp/callback.json
 
           curl -sS -X POST "$CONSOLE_URL/api/agent/callback" \
             -H "Authorization: Bearer $CONSOLE_TOKEN" \
             -H "Content-Type: application/json" \
             --data-binary @/tmp/callback.json
 
-      Use `"approved"` or `"changes_requested"` for the status, matching the
-      review you actually posted. Expect `{"ok":true}` back.
+      Use `approved` or `changes_requested`, matching the review you posted.
 
-      You cannot merge, and must not try to. Merging stays with a human.
+      You cannot merge, and must not try to. That decision stays with a human.

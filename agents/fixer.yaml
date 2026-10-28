@@ -32,8 +32,13 @@ env:
   #
   # The address is dca-gh-bot's GitHub noreply address, so commits attribute to
   # the review bot rather than to an identity GitHub cannot resolve.
+  # Both pairs are required. Setting only GIT_AUTHOR_* moves the failure rather
+  # than fixing it: git then reports "Committer identity unknown" instead of
+  # "Author identity unknown", and the agent still has to recover. Measured.
   GIT_AUTHOR_NAME: "TaskFlow Fixer"
   GIT_AUTHOR_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
+  GIT_COMMITTER_NAME: "TaskFlow Fixer"
+  GIT_COMMITTER_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
 
 secrets:
   # Mandatory. Without it OpenCode falls back to its own default provider

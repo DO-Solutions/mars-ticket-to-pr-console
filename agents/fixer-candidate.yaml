@@ -1,0 +1,195 @@
+# Fixer agent — CANDIDATE.
+#
+# Identical to agents/fixer.yaml except that it carries the git identity fix
+# and is not connected to the TaskFlow board. It exists so the fix can be
+# evaluated with Simulations while production keeps running unchanged.
+#
+# Used as the session template for a FRESH webhook trigger: every dispatch gets
+# its own sandbox, which is then destroyed. That is deliberate. A reused session
+# keeps its conversation history, so the agent carries every previous ticket into
+# the next one — which inflates context, and led it to invent branch names like
+# `-v2` and `-v10` because it remembered the earlier ones.
+#
+# The cost is a clone and an `npm ci` on every run, roughly twenty seconds. The
+# benefit is that every run starts identically, which matters more for a demo.
+#
+# Create the trigger with:
+#   doctl harness-runtime triggers create --kind webhook --name taskflow-fixer \
+#     --session-mode fresh --spec agents/fixer.yaml --provider custom \
+#     --prompt "$(cat prompts/fixer.tmpl)" --output-mode none \
+#     --secret HARNESS_INFERENCE_API_KEY=@~/.secrets/do-inference.key \
+#     --secret GITHUB_TOKEN=@~/.secrets/taskflow-pat \
+#     --secret CONSOLE_TOKEN=@~/.secrets/console-callback
+name: taskflow-fixer-candidate
+agent: opencode
+size: mars-2vcpu-4gb
+
+env:
+  HARNESS_INFERENCE_BASE_URL: "https://inference.do-ai.run/v1"
+  HARNESS_INFERENCE_MODEL: deepseek-v4-pro
+  TARGET_REPO: "${TARGET_REPO}"
+  # Deliberately blank: this agent is not wired to the TaskFlow board. It is
+  # invoked only by its own webhook trigger, for simulations and evaluation.
+  CONSOLE_URL: ""
+  # The fix under evaluation. Both pairs are required: setting only
+  # GIT_AUTHOR_* moves the failure rather than removing it, and git then
+  # reports "Committer identity unknown" instead. Measured, not assumed.
+  #
+  # The address is dca-gh-bot's GitHub noreply address, so commits attribute to
+  # the review bot rather than to an identity GitHub cannot resolve.
+  GIT_AUTHOR_NAME: "TaskFlow Fixer"
+  GIT_AUTHOR_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
+  GIT_COMMITTER_NAME: "TaskFlow Fixer"
+  GIT_COMMITTER_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
+
+secrets:
+  # Mandatory. Without it OpenCode falls back to its own default provider
+  # (api.githubcopilot.com) and the run fails — it does not reach DigitalOcean
+  # inference at all.
+  HARNESS_INFERENCE_API_KEY: "placeholder-injected-at-create-time"
+  GITHUB_TOKEN: "placeholder-injected-at-create-time"
+  CONSOLE_TOKEN: "placeholder-injected-at-create-time"
+
+# Guardrails. On an unattended run there is nobody to answer an approval
+# prompt, so `ask` is not a control here — anything the agent must never do
+# needs an explicit `deny`.
+permissions:
+  default: allow
+  rules:
+    - { tool: bash, match: { command: "rm -rf *" },            action: deny }
+    - { tool: bash, match: { command: "git push --force*" },   action: deny }
+    - { tool: bash, match: { command: "git push -f*" },        action: deny }
+    - { tool: bash, match: { command: "git push origin main*" }, action: deny }
+    - { tool: bash, match: { command: "gh pr merge*" },        action: deny }
+    - { tool: bash, match: { command: "curl * | sh" },         action: deny }
+
+egress:
+  allow_hosts:
+    - api.github.com
+    - github.com
+    - codeload.github.com
+    - inference.do-ai.run
+    - registry.npmjs.org
+    - "${CONSOLE_HOST}"
+
+skills:
+  - name: fix-a-taskflow-ticket
+    description: Use when handling a TaskFlow ticket that asks for a bug fix, a feature, or a chore in the taskflow API repo.
+    license: Apache-2.0
+    metadata: { author: DO-Solutions }
+    allowed_tools: [bash, file.read, file.write]
+    instructions: |
+      # Fixing a TaskFlow ticket
+
+      Work through these steps in order. Do not skip the reproduce step.
+
+      ## 1. Get the code
+      This sandbox is new, so clone and install:
+
+          cd /workspace
+          gh repo clone "$TARGET_REPO" taskflow
+          cd taskflow
+          npm ci
+
+      `gh` is already authenticated from $GITHUB_TOKEN. Note `jq` is NOT
+      installed — use `python3 -m json.tool` or `python3 -c` for JSON.
+
+      ## 2. Read the rules
+      Read `AGENTS.md` in the repo root. It is binding, and a second agent will
+      review your pull request against it.
+
+      ## 3. Reproduce before fixing
+      Most tickets already have a regression test written and marked
+      `it.skip(...)` with the ticket key in a comment above it. Find it:
+
+          grep -rn "TF-" tests/
+
+      Un-skip that test (`it.skip(` -> `it(`) and run `npm test`. Confirm it
+      fails, and read the failure message — it tells you what the correct
+      behaviour is. If the ticket has no test yet, write one first, and confirm
+      it fails for the right reason.
+
+      ## 4. Fix the root cause
+      Change the source in `src/`, not the test. Fix the underlying expression,
+      not the symptom. Keep the change as small as the ticket allows, and do not
+      touch files the ticket does not concern.
+
+      ## 5. Prove it
+      Run `npm test`. Every test must pass — the baseline is 6 passing, plus
+      whichever tests you un-skipped. If you broke an unrelated test, fix your
+      change rather than the test.
+
+      ## 6. Commit and push
+
+      Everything must go to `$TARGET_REPO` and nowhere else. If a push or a
+      pull request fails, **stop and report the failure** — do not rewrite the
+      remote to point at a different repository, do not push to a fork, and do
+      not open the pull request against another repo. A run that succeeds
+      against the wrong repository is worse than one that fails honestly,
+      because it looks correct. If the push is rejected, say which command
+      failed and what it returned, then stop.
+
+      Branch and commit per AGENTS.md, using `agent/TF-<number>-<slug>`.
+
+      If that branch already exists on the remote, the previous run was not
+      cleaned up. **Do not delete the remote branch** to free the name, and do
+      not invent a suffix — say so and stop, so the cleanup gets fixed instead
+      of silently destroying someone else's work.
+
+          git switch -c "agent/TF-<number>-<short-slug>"
+          git add -A
+          git commit -m "fix(tasks): <imperative summary>"
+          git push -u origin "agent/TF-<number>-<short-slug>"
+
+      Never force-push, never push to main, never merge the PR yourself.
+
+      ## 7. Open the pull request
+
+      **Run the command — do not print it.** Writing a fenced code block
+      containing `gh pr create` is not opening a pull request, and a run that
+      ends that way has failed however complete the summary looks.
+
+      Title must start with the ticket key. The body must have **Root cause**,
+      **Fix**, and **Verification** sections, per AGENTS.md:
+
+          gh pr create --title "TF-<number>: <summary>" --body "$(cat <<'EOF'
+          ## Root cause
+          <the specific line or expression at fault, and why it misbehaves>
+
+          ## Fix
+          <what you changed>
+
+          ## Verification
+          <the npm test summary line>
+          EOF
+          )"
+
+      ## 8. Report back to the board
+      Write your summary to a file first, so no shell quoting or JSON escaping
+      can go wrong, then let python build the request body:
+
+          cat > /tmp/summary.txt <<'TXT'
+          <two or three sentences: the root cause and what you changed>
+          TXT
+
+          python3 -c "
+          import json,sys
+          print(json.dumps({
+            'ticket':  sys.argv[1],
+            'author':  'fixer',
+            'status':  'pr_opened',
+            'pr_url':  sys.argv[2],
+            'body':    open('/tmp/summary.txt').read().strip(),
+          }))" "<TICKET KEY>" "<PR URL from gh>" > /tmp/callback.json
+
+          curl -sS -X POST "$CONSOLE_URL/api/agent/callback" \
+            -H "Authorization: Bearer $CONSOLE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @/tmp/callback.json
+
+      Substitute the ticket key given in your prompt and the PR URL exactly as
+      `gh pr create` printed it. Expect `{"ok":true}` back.
+
+      If a guardrail blocks something you were asked to do, do not try to work
+      around it. Finish the rest of the ticket and say plainly in both the PR
+      body and the callback which action was blocked and why.

@@ -25,20 +25,17 @@ env:
   HARNESS_INFERENCE_MODEL: deepseek-v4-pro
   TARGET_REPO: "${TARGET_REPO}"
   CONSOLE_URL: "${CONSOLE_URL}"
-  # Git refuses to commit without an identity, and the sandbox has none. Without
-  # these the first `git commit` of every run fails with "Author identity
-  # unknown" and the agent has to recover — which it does, inventing a different
-  # name and address each time. Signals caught this in 100% of runs.
+  # NOTE: no GIT_AUTHOR_* / GIT_COMMITTER_* here, deliberately.
   #
-  # The address is dca-gh-bot's GitHub noreply address, so commits attribute to
-  # the review bot rather than to an identity GitHub cannot resolve.
-  # Both pairs are required. Setting only GIT_AUTHOR_* moves the failure rather
-  # than fixing it: git then reports "Committer identity unknown" instead of
-  # "Author identity unknown", and the agent still has to recover. Measured.
-  GIT_AUTHOR_NAME: "TaskFlow Fixer"
-  GIT_AUTHOR_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
-  GIT_COMMITTER_NAME: "TaskFlow Fixer"
-  GIT_COMMITTER_EMAIL: "341468481+dca-gh-bot@users.noreply.github.com"
+  # Git refuses to commit without an identity and the sandbox has none, so the
+  # first `git commit` of every run fails with "Author identity unknown" and the
+  # agent recovers by configuring git itself, choosing a different name and
+  # address each time. Signals finds this in 100% of runs.
+  #
+  # This is the production agent and it stays unfixed on purpose: it is the
+  # subject of the Signals write-up. The fix is carried by
+  # agents/fixer-candidate.yaml, which runs as a separate agent so it can be
+  # evaluated without changing production.
 
 secrets:
   # Mandatory. Without it OpenCode falls back to its own default provider
